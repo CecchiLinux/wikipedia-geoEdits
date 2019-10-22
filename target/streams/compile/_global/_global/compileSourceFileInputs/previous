@@ -1,0 +1,1 @@
+["sbt.Task[scala.collection.immutable.Map[java.lang.String, scala.collection.Seq[scala.Tuple2[java.nio.file.Path, sbt.nio.FileStamp]]]]",{"2.11.11":{"hashes":[["/home/enrico/git-repos/Wikipedia-geoEdits/src/main/scala/Main.scala","0cac667f919729d97e1fc57e333bc1f279ffbf8a"]],"lastModifiedTimes":[]}}]

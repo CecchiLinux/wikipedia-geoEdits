@@ -1,0 +1,33 @@
+[0m[[0m[0mdebug[0m] [0m[0mPackaging /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/wikipedia-geoedits_2.11-0.1.jar ...[0m
+[0m[[0m[0mdebug[0m] [0m[0mInput file mappings:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$$anonfun$2.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$$anonfun$2.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$CSVWrapper$$anonfun$toCSV$extension$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$CSVWrapper$$anonfun$toCSV$extension$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$CSVWrapper.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$CSVWrapper.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$Edit.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$Edit.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$$anonfun$4.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$$anonfun$4.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$Edit$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$Edit$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$$anonfun$5$$anonfun$apply$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$$anonfun$5$$anonfun$apply$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$$anonfun$2$$anonfun$3.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$$anonfun$2$$anonfun$3.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$$anonfun$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$$anonfun$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$$anonfun$5.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$$anonfun$5.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$CSVWrapper$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$CSVWrapper$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Main$$anonfun$main$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/enrico/git-repos/Wikipedia-geoEdits/target/scala-2.11/classes/Main$$anonfun$main$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0mDone packaging.[0m
