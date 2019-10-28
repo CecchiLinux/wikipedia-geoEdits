@@ -11,7 +11,8 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
 
   val ip2locationPath = opt[File](
     argName = "ip2location path",
-    descr = "Path to the IP2LOCATION-LITE.CSV file"
+    descr = "Path to the IP2LOCATION-LITE-DB9.CSV file",
+    required = true
   )
   validateFileExists(ip2locationPath)
 
