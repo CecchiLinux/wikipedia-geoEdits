@@ -1,40 +1,20 @@
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.hadoop.io.compress.{BZip2Codec}
+import org.apache.hadoop.io.compress.BZip2Codec
 import org.apache.spark.broadcast.Broadcast
-import MyConf.Conf
-import Utility.DataLoader
-import Model._
 import javax.imageio.ImageIO
 import java.awt.{Color, Graphics, RenderingHints}
 import java.awt.image.BufferedImage
 import java.io.File
-
-import scala.collection.mutable
-import java.util.Locale
-import java.text.NumberFormat
+import MyConf.Conf
+import Utility.{DataLoader, WorldMap}
+import Model._
+import My_KMeans._
 
 object Main extends App {
 
-  private def toImageCoordinates(longitude: Double, latitude: Double, imageWidth: Int, imageHeight: Int): (Int, Int) = {
-    (
-      (imageWidth * (0.5 + longitude / 360)).toInt,
-      (imageHeight * (0.5 - latitude / 180)).toInt
-    )
-  }
-
-  private def generateColor(group: Int, groupCount: Int): Color = {
-    val hue = group.toFloat / groupCount
-    val saturation = 0.8f
-    val lightness = 0.5f
-    Color.getHSBColor(hue, saturation, lightness)
-  }
-
-  private def drawMapBackground(graphics: Graphics, backgroundImageFileName: String, imageHeight: Int, imageWidth: Int) {
-    val mapBackground = ImageIO.read(Main.getClass.getClassLoader.getResourceAsStream(backgroundImageFileName))
-    graphics.drawImage(mapBackground, 0, 0, imageWidth, imageHeight, Color.WHITE, null)
-    graphics.setColor(new Color(0, 0, 0, 100))
-    graphics.fillRect(0, 0, imageWidth, imageHeight)
+  object locationColumns extends Enumeration {
+    val classIp, countryCode, countryName, regionName, city, latitude, longitude = Value
   }
 
   implicit class CSVWrapper(val prod: Product) extends AnyVal {
@@ -53,7 +33,6 @@ object Main extends App {
       else if (ips(mid) > target) search(start, mid - 1)
       else search(mid + 1, end)
     }
-
     search()
   }
 
@@ -64,14 +43,17 @@ object Main extends App {
     val mySparkConf = new SparkConf()
     val masterURL = conf.masterURL.apply()
     mySparkConf.setAppName("WikipediaEdits")
+    //mySparkConf.set("spark.driver.allowMultipleContexts", "true")
     mySparkConf.setMaster(masterURL)
+    mySparkConf.set("spark-serializer", "org.apache.spark.serializer.KryoSerializer")
+    mySparkConf.set("spark.kryoserializer.buffer.max", "2047")
+    mySparkConf.registerKryoClasses(Array(classOf[Point]))
 
     val sc = SparkSession
       .builder()
       .config(mySparkConf)
       .getOrCreate().sparkContext
     //sc.setLogLevel("ERROR")
-    val loader = new DataLoader()
 
     var inFileEditsPath = conf.editsPath.apply().getAbsolutePath
     val inFileLocationsPath = conf.ip2locationPath.apply().getAbsolutePath
@@ -79,55 +61,95 @@ object Main extends App {
     if (conf.associateLocation.apply()) {
       //-a -i /home/enrico/datasets/IP2LOCATION-LITE-DB9.CSV.bz2 -e /home/enrico/datasets/enwiki-longIp.bz2 -o /home/enrico/datasets/outputTest
       var outFile = conf.outLocationsFile.apply().getAbsolutePath
-      associateIps(loader, inFileEditsPath, inFileLocationsPath, outFile, sc)
+      associateIps(inFileEditsPath, inFileLocationsPath, outFile, sc)
 
       inFileEditsPath = outFile
       //outFile = "/home/enrico/datasets/catIpsFinal"
       outFile = "/home/enrico/datasets/catIpsFinalTest"
-      groupCategories(loader, inFileEditsPath, outFile, sc)
+      groupCategories(inFileEditsPath, outFile, sc)
 
     } else {
 
       // ===================== load files
-      val locationsRDD = loader.loadLocations(inFileLocationsPath, separator = "\",\"", sc)
-      //val editsRDD = loader.loadEditsWithClass(inFileEditsPath + "/part-00[0-5]*", separator='|', sc)
-
+      val locationsRDD = DataLoader.loadLocations(inFileLocationsPath, separator = "\",\"")
+      //val editsRDD = DataLoader.loadEditsWithClass(inFileEditsPath + "/part-00[0-5]*", separator='|')
       // ===================== broadcast array through clusters
       val locationsMap = sc.broadcast(locationsRDD.collect.toMap)
 
+      // ////val reg = ".*_war(s)?_.*".r
+      val inFile = "/home/enrico/datasets/catIpsFinal"
+      val catFilter = "war"
+      //filterCategories(catFilter, inFile, sc)
 
 
+      val inFileFiltered = "/home/enrico/datasets/" + catFilter
 
-     // ////val reg = ".*_war(s)?_.*".r
-     // ////editsRDDCatIps.map( line => line.toLowerCase)
-     // ////  .filter( line => reg.pattern.matcher(line).matches )
-     // ////  .coalesce(1, true).saveAsTextFile("/home/enrico/datasets/catIpsWar.txt", classOf[GzipCodec])
+      // K-Means test
+      val points = DataLoader.loadPoints(inFileFiltered + "/part-00[0-5]*", '|')
+        .map(ip =>
+          {
+            val locationString = locationsMap.value(ip)
+            val location = locationString.split('|')
+            val latitude = location(locationColumns.latitude.id)
+            val longitude = location(locationColumns.longitude.id)
+            new Point(longitude.toDouble, latitude.toDouble)
+          }
+        )
 
+      System.err.println("Number of points: " + points.collect.length + "\n")
 
+      //val centroids = Array.fill(10) { Point.random }
+      val centroids = points.takeSample(withReplacement = false, 10)
+      println(centroids.mkString("(", ", ", ")"))
 
+      val mkmeans = new My_KMeans(masterURL, points)
 
+      // Start the Spark run
+      val resultCentroids = mkmeans.clusterize(10, centroids, 0.01)
 
-      //val editsRDDCatIps = sc.objectFile[(String, List)]("/home/enrico/datasets/catIpsWWII")
+      // create image
+      val image = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
+      val graphics = image.createGraphics
+      graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-      //editsRDDCatIps.keys.foreach(println)
+      // draw map
+      val imageFile = Main.getClass.getClassLoader.getResourceAsStream(conf.backgroundImageFileName)
+      WorldMap.drawMapBackground(imageFile, graphics, conf.imageWidth, conf.imageHeight)
+      WorldMap.drawCentroid(resultCentroids, graphics, conf.imageWidth, conf.imageHeight)
+      WorldMap.drawIps(points.collect(), graphics, conf.imageWidth, conf.imageHeight)
+      // write image to disk
+      //ImageIO.write(image, "png", new File("mappa1.png"))
+      ImageIO.write(image, "png", new File("/home/enrico/datasets/mappaWar.png"))
 
     }
 
   }
 
-  def filterCategories () = {
+  def filterCategories (regString: String, inFileEditsPath: String, sc: SparkContext) = {
+
+    val editsRDD = sc.textFile(inFileEditsPath + "/part-00[0-5]*")
 
     // val reg = ".*_world_war_ii_.*".r
-    // editsRDDCatIps.map(line => line.toLowerCase)
-    //   .filter(line => reg.pattern.matcher(line).matches)
-    //   .coalesce(1, true).saveAsObjectFile("/home/enrico/datasets/catIpsWWII")
+    val reg = ".*_" + regString + "_.*"
+    editsRDD.map( line => line.split(':') )
+      //firstEdits.map( line => line.split('|') )
+      // RDD[ Array[ String ]
+      .map( arr => {
+        val category = arr(0)
+        val ips = arr(1)
+        ( category,  ips )
+      })
+      .filter(x => reg.r.pattern.matcher(x._1).matches)
+      .map(x => s"${x._1}:${x._2}")
+      .coalesce(1, true).saveAsTextFile("/home/enrico/datasets/" + regString)
+
   }
 
-  def associateIps (loader: DataLoader, inFileEditsPath: String, inFileLocationsPath: String, outFile: String, sc: SparkContext) = {
+  def associateIps (inFileEditsPath: String, inFileLocationsPath: String, outFile: String, sc: SparkContext) = {
 
     //// ===================== load files
-    val editsRDD = loader.loadEdits(inFileEditsPath, separator = '|', sc)
-    val locationsRDD = loader.loadLocations(inFileLocationsPath, separator = "\",\"", sc)
+    val editsRDD = DataLoader.loadEdits(inFileEditsPath, separator = '|')
+    val locationsRDD = DataLoader.loadLocations(inFileLocationsPath, separator = "\",\"")
     //// ===================== broadcast array through clusters
     val longIps: Broadcast[Array[Long]] = sc.broadcast(locationsRDD.keys.collect.sorted)
 
@@ -149,7 +171,7 @@ object Main extends App {
 
   }
 
-  def groupCategories (loader: DataLoader, inFileEditsPath: String, outFile: String, sc: SparkContext) = {
+  def groupCategories (inFileEditsPath: String, outFile: String, sc: SparkContext) = {
 
     //// ====================== cat - List[ips]
     val editsRDD = sc.textFile(inFileEditsPath + "/part-00[0-5]*")
@@ -173,10 +195,10 @@ object Main extends App {
       .saveAsTextFile(outFile, classOf[BZip2Codec])
   }
 
-  def categoriesCounter(loader: DataLoader, inFileEditsPath: String, outFile: String, sc: SparkContext) = {
+  def categoriesCounter(inFileEditsPath: String, outFile: String, sc: SparkContext) = {
 
     // ===================== categories count
-    val editsRDD = loader.loadEditsWithClass(inFileEditsPath + "/part-00[0-5]*", separator='|', sc)
+    val editsRDD = DataLoader.loadEditsWithClass(inFileEditsPath + "/part-00[0-5]*", separator='|')
     val catCounts = editsRDD.values.
       map{ case (edit) => edit.categories }.
       //filter((x => x != "") ).

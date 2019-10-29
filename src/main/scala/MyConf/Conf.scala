@@ -29,6 +29,10 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   )
   validateFileDoesNotExist(outLocationsFile)
 
+  val backgroundImageFileName = "world-map.png"
+  val imageWidth = 1000
+  val imageHeight = 500
+
   val masterURL = opt[String](
     argName = "Master URL",
     descr = "Master URL",

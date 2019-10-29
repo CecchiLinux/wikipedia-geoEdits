@@ -1,14 +1,25 @@
 package Utility
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import Model._
+import org.apache.spark.sql.SparkSession
 
-class DataLoader {
+object DataLoader {
+
+  def mySparkConf = new SparkConf()
+  mySparkConf.setAppName("WikipediaEdits")
+  mySparkConf.set("spark-serializer", "org.apache.spark.serializer.KryoSerializer")
+  mySparkConf.set("spark.kryoserializer.buffer.max", "2047")
+  mySparkConf.registerKryoClasses(Array(classOf[Point]))
+
+  val sc = SparkSession
+    .builder()
+    .config(mySparkConf)
+    .getOrCreate().sparkContext
 
 
-
-  def loadEdits(path: String, separator: Char, sc: SparkContext): RDD[(String, Edit)] = {
+  def loadEdits(path: String, separator: Char): RDD[(String, Edit)] = {
     object editColumns extends Enumeration {
       val artId, revId, artName, ip, categories, entity, longIp = Value
     }
@@ -33,7 +44,7 @@ class DataLoader {
   }
   // case class Location(longIp: Long, countryCode: String, countryName: String, regionName: String, city: String, latitude: String , longitude: String)
 
-  def loadLocations(path: String, separator: String, sc: SparkContext): RDD[(Long, String)] = {
+  def loadLocations(path: String, separator: String): RDD[(Long, String)] = {
     object locationColumns extends Enumeration {
       val classIp, countryCode, countryName, regionName, city, latitude, longitude = Value
     }
@@ -51,7 +62,7 @@ class DataLoader {
     }
   }
 
-  def loadEditsWithClass(path: String, separator: Char, sc: SparkContext): RDD[(String, Edit)] = {
+  def loadEditsWithClass(path: String, separator: Char): RDD[(String, Edit)] = {
     object editColumns extends Enumeration {
       val artId, revId, artName, ip, categories, entity, longIp = Value
     }
@@ -75,7 +86,7 @@ class DataLoader {
     }
   }
 
-  def loadEditsWithLoc(path: String, separator: Char, sc: SparkContext): RDD[(String, EditWithLoc)] = {
+  def loadEditsWithLoc(path: String, separator: Char): RDD[(String, EditWithLoc)] = {
     val editsTextRDD = sc.textFile(path)
     editsTextRDD.map {
       line =>
@@ -98,5 +109,18 @@ class DataLoader {
         )
         (key, edit)
     }
+  }
+
+  def loadPoints(path: String, separator: Char) = {
+    val categoriesTextRdd = sc.textFile(path)
+    // RDD[ String ]
+    categoriesTextRdd.map( line => line.split(':') )
+      // RDD[ Array[ String ]
+      .flatMap( arr => {
+        val ipsString = arr(1)
+        val ips = ipsString.split('|')
+        ips.map(ip => ip.replaceAll("[^0-9.]", "").toLong)
+        // RDD[ Long ]
+      })
   }
 }
