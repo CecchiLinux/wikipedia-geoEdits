@@ -83,11 +83,11 @@ object Main extends App {
     //val catFilter = "war"
     //val catFilter = conf.words.apply().split(' ')
     val catFilter = conf.words.apply()
-    val outFileName = conf.mainFolder.apply().toPath + "/" + catFilter.mkString("_")
-    filterCategories(catFilter, conf.outCategoriesIps, sc)
-      // RDD[String, String]
-      .map(x => s"${x._1}#${x._2}")
-      .coalesce(1, true).saveAsTextFile(outFileName)
+    val outFileName = conf.mainFolder.apply().toPath + "/filters-" + catFilter.mkString("_")
+    //filterCategories(catFilter, conf.outCategoriesIps, sc)
+    //  // RDD[String, String]
+    //  .map(x => s"${x._1}#${x._2}")
+    //  .coalesce(1, true).saveAsTextFile(outFileName)
 
 
     // K-Means
@@ -113,11 +113,16 @@ object Main extends App {
 
     val groups = points
       // RDD[Point]
-      .map(point => centroids.indexOf(mkmeans.KMeansHelper.closestCentroid(centroids, point)) -> List(point))
+      .map(point => (mkmeans.KMeansHelper.closestCentroid(resultCentroids, point), List(point)))
       // RDD[(Point, List[Point])]
       .reduceByKey(_ ::: _)
       // RDD[(Point, List[Point])]
+      .map {
+        case (point, points) => (resultCentroids.indexOf(point), points)
+      }
+      // RDD[(Int, List[Points])]
       .collect()
+      // Array[(Int, List[Point])]
 
     // create image
     val image = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
@@ -126,14 +131,16 @@ object Main extends App {
 
     // draw map
     val imageFile = Main.getClass.getClassLoader.getResourceAsStream(conf.backgroundImageFileName)
-
+    val imageFileBoundaries = Main.getClass.getClassLoader.getResourceAsStream(conf.foregroundBoundaries)
     val groupColors = for (group <- 0 until conf.k.apply()) yield WorldMap.generateColor(group, conf.k.apply())
     WorldMap.drawMapBackground(imageFile, graphics, conf.imageWidth, conf.imageHeight)
     WorldMap.drawIps(groups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+    WorldMap.drawMapBackground(imageFileBoundaries, graphics, conf.imageWidth, conf.imageHeight)
     WorldMap.drawCentroid(resultCentroids, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+    WorldMap.drawIpsCounts(groups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
     // write image to disk
     //ImageIO.write(image, "png", new File("mappa1.png"))
-    ImageIO.write(image, "png", new File(conf.mainFolder.apply().getAbsolutePath + "/map" + "_" + catFilter.mkString("_") + ".png"))
+    ImageIO.write(image, conf.imageFormat, new File(conf.mainFolder.apply().getAbsolutePath + "/map" + "_" + catFilter.mkString("_") + ".png"))
 
   }
 
@@ -155,7 +162,7 @@ object Main extends App {
       // RDD [String, String]
       //.filter(x => reg.r.pattern.matcher(x._1).matches)
       //.filter(x => catFilter.exists(x._1.contains))
-      .filter(x => catFilter.forall(x._1.contains))
+      .filter(x => catFilter.forall(f => x._1.split("_").contains(f)))
 
   }
 

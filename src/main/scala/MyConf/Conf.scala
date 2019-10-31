@@ -61,9 +61,19 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
     default =  Some(0.01)
   )
 
-  val backgroundImageFileName = "world-map.png"
-  val imageWidth = 1000
-  val imageHeight = 500
+  //val backgroundImageFileName = "world-map2.png"
+  //val imageFormat = "png"
+  //val imageWidth = 1000
+  //val imageHeight = 500
+
+  //val backgroundImageFileName = "Day_lrg_white.png"
+  val backgroundImageFileName = "world.png"
+  val foregroundBoundaries = "world_wbt.png"
+  //val backgroundImageFileName = "Day_lrg.png"
+  val imageFormat = "png"
+  val imageWidth = 2000
+  val imageHeight = 1000
+
 
   val masterURL = opt[String](
     argName = "Master URL",
