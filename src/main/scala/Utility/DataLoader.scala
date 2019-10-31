@@ -114,12 +114,12 @@ object DataLoader {
   def loadPoints(path: String, separator: Char) = {
     val categoriesTextRdd = sc.textFile(path)
     // RDD[ String ]
-    categoriesTextRdd.map( line => line.split(':') )
+    categoriesTextRdd.map( line => line.split('#') )
       // RDD[ Array[ String ]
       .flatMap( arr => {
         val ipsString = arr(1)
         val ips = ipsString.split('|')
-        ips.map(ip => ip.replaceAll("[^0-9.]", "").toLong)
+        ips.map(ip => ip.toLong)
         // RDD[ Long ]
       })
   }

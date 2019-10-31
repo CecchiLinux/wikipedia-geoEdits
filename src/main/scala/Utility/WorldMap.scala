@@ -29,17 +29,26 @@ object WorldMap {
     graphics.fillRect(0, 0, imageWidth, imageHeight)
   }
 
-  def drawIps(coordinates: Seq[Point],graphics: Graphics, imageWidth: Int, imageHeight: Int) {
-    for (coordinate <- coordinates) {
-      val (x, y) = toImageCoordinates(coordinate.x, coordinate.y, imageWidth, imageHeight)
-      graphics.fillOval(x - 1, y - 1, 2, 2)
+  def drawIps(coordinates: Seq[(Int, List[Point])],graphics: Graphics, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
+    for ((group, ips) <- coordinates) {
+        val color = groupColors(group).brighter()
+        graphics.setColor(new Color(color.getRed, color.getGreen, color.getBlue, 50))
+        for (coordinate <- ips) {
+          val (x, y) = toImageCoordinates(coordinate.x, coordinate.y, imageWidth, imageHeight)
+          graphics.fillOval(x - 1, y - 1, 2, 2)
+        }
+      }
+  }
+
+  def drawCentroid(coordinates: Seq[Point],graphics: Graphics, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
+    for (group <- 0 until coordinates.length) {
+      val (x, y) = toImageCoordinates(coordinates(group).x, coordinates(group).y, imageWidth, imageHeight)
+      val color = groupColors(group)
+      graphics.setColor(color)
+      graphics.fillOval(x - 6, y - 6, 12, 12)
+      graphics.setColor(Color.WHITE)
+      graphics.drawOval(x - 6, y - 6, 12, 12)
     }
   }
 
-  def drawCentroid(coordinates: Seq[Point],graphics: Graphics, imageWidth: Int, imageHeight: Int) {
-    for (coordinate <- coordinates) {
-      val (x, y) = toImageCoordinates(coordinate.x, coordinate.y, imageWidth, imageHeight)
-      graphics.fillOval(x - 1, y - 1, 5, 5)
-    }
-  }
 }
