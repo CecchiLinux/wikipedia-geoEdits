@@ -10,6 +10,10 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
     descr = "Perform the association phase"
   )
 
+  val filterCategories = opt[Boolean](
+    descr = "" //TODO
+  )
+
   val mainFolder = opt[File](
     argName = "folder path",
     descr = "resources files folder",

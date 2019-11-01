@@ -35,7 +35,9 @@ class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
 
 
   def clusterize(clusterNumbers: Int, startCentroids: Array[Point], epsilon: Double) = {
-
+    /**
+     * Start the k-means algorithm
+     */
     // Use the given centroids, or initialize k random ones
     val centroids = (
       if (startCentroids.length == clusterNumbers)
@@ -44,16 +46,16 @@ class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
         Array.fill(clusterNumbers) { Point.random }
       )
 
-    // Start the Spark run
-    val resultCentroids = kmeans(centroids, epsilon)
-
-    System.err.println("Final centroids: ")
-    println(resultCentroids.map(centroid => "%3f,%3f\n".format(centroid.x, centroid.y)).mkString)
-    resultCentroids
+    kmeans(centroids, epsilon)
+    // Array[Point]
 
   }
 
   def kmeans(centroids: Array[Point], epsilon: Double): Array[Point] = {
+    /**
+     *
+     */
+
     // Assign points into clusters based on their closest centroids,
     // and take the average of all points in each cluster
     val clusters =
@@ -62,7 +64,6 @@ class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
           // RDD[Point]
           .map(point => KMeansHelper.closestCentroid(centroids, point) -> (point, 1))
           // RDD[Point, (Point, Int)] // RDD[ClosestCentroid, (Point, 1)]
-          //.reduceByKeyToDriver({
           .reduceByKeyLocally({
             case ((ptA, numA), (ptB, numB)) => (ptA + ptB, numA + numB)
           })
@@ -73,33 +74,6 @@ class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
           // Map[Point, Point]
       )
 
-    // OK
-    //val clus = this.points
-    //  // RDD[Point]
-    //  .map(point => KMeansHelper.closestCentroid(centroids, point) -> (point, 1))
-    //clus.saveAsTextFile("/home/enrico/datasets/clusters")
-
-    val clusters_debug = this.points
-      // RDD[Point]
-      .map(point => KMeansHelper.closestCentroid(centroids, point) -> (point, 1))
-      // RDD[Point, (Point, Int)] // RDD[ClosestCentroid, (Point, 1)]
-      .reduceByKeyLocally({
-        case ((ptA, numA), (ptB, numB)) => (ptA + ptB, numA + numB)
-      })
-      // Map[Point, (Point, Int)]
-        .map(c => c._1).foreach(println)
-    println()
-
-    //    clusters.keys.map(c => clusters.get(c)).foreach(println)
-    //clusters.keys.foreach(println)
-    //println()
-    //centroids.map(c => (c)).foreach(println)
-    //println()
-    //centroids.map(c => clusters.get(c)).foreach(println)
-
-    //clusters_debug.keys.foreach(println)
-    //centroids.map(c => clusters.get(c)).foreach(println)
-
     // Recalculate centroids based on their clusters
     // (or leave them alone if they don't have any points in their cluster)
     val newCentroids = centroids.map(oldCentroid => {
@@ -108,9 +82,6 @@ class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
         case None => oldCentroid
       }
     })
-
-    //centroids.foreach(println)
-    //newCentroids.foreach(println)
 
     // Calculate the centroid movement for the stopping condition
     val movement = (centroids zip newCentroids).map({ case (a, b) => a distance b })
