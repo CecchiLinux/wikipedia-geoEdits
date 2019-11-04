@@ -111,16 +111,32 @@ object DataLoader {
     }
   }
 
-  def loadPoints(path: String, separator: Char) = {
+  def loadPoints(path: String, separator: Char): RDD[(String, List[Long])] = {
     val categoriesTextRdd = sc.textFile(path)
     // RDD[ String ]
     categoriesTextRdd.map( line => line.split('#') )
       // RDD[ Array[ String ]
       .flatMap( arr => {
+        val category = arr(0)
         val ipsString = arr(1)
         val ips = ipsString.split('|')
-        ips.map(ip => ip.toLong)
-        // RDD[ Long ]
+        ips.map(ip => (category, ip.toLong))
       })
+      // RDD[(String, Long)]
+      .map( x => (x._1, List(x._2)) )
+      .reduceByKey(_ ::: _)
   }
+
+  //def loadPoints(path: String, separator: Char) = {
+  //  val categoriesTextRdd = sc.textFile(path)
+  //  // RDD[ String ]
+  //  categoriesTextRdd.map( line => line.split('#') )
+  //    // RDD[ Array[ String ]
+  //    .flatMap( arr => {
+  //      val ipsString = arr(1)
+  //      val ips = ipsString.split('|')
+  //      ips.map(ip => ip.toLong)
+  //      // RDD[ Long ]
+  //    })
+  //}
 }

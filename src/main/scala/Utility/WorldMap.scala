@@ -7,6 +7,7 @@ import java.util.Locale
 
 import Model.Point
 import javax.imageio.ImageIO
+import javax.swing.{BoxLayout, JPanel}
 
 object WorldMap {
 
@@ -70,6 +71,22 @@ object WorldMap {
       graphics.setColor(Color.WHITE)
       graphics.drawString(ipsCount, (x - bound.getWidth / 2).toInt, (y + bound.getHeight + 10).toInt)
     }
+  }
+
+  def writeTopCategories(topCats: Seq[(Int, (String, Int))], graphics: Graphics2D, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
+    val offset = 30
+    var i = 0
+    graphics.setFont(new Font("Arial Black", Font.BOLD, 20))
+
+    for ((group, cat) <- topCats) {
+      val color = groupColors(group)
+      graphics.setColor(color)
+      graphics.fillRect(10, imageHeight / 2 + offset*i, 20, 20)
+      graphics.setColor(Color.WHITE)
+      graphics.drawString(cat._1.replace("_", " "), 38, imageHeight / 2 + offset*i + 18)
+      i = i+1
+    }
+
   }
 
 }

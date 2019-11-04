@@ -11,7 +11,8 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   )
 
   val filterCategories = opt[Boolean](
-    descr = "" //TODO
+    descr = "", //TODO
+    required = true
   )
 
   val mainFolder = opt[File](
@@ -43,7 +44,8 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
 
   val words = opt[List[String]](
     argName = "filter words",
-    descr = "Comma separated filter words."
+    descr = "Comma separated filter words.",
+    required = true
   )
 
   val k = opt[Int](

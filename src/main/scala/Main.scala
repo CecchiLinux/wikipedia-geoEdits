@@ -27,7 +27,7 @@ object Main extends App {
     }.mkString("|")
   }
 
-  def checker[T <: Double](target: T, ips: Array[T]): T = {
+  def checker[T <: Long](target: T, ips: Array[T]): T = {
     /**
      * Dichotomic search: search for the target element through the array.
      * Return the target element if present or the nearest smaller element on the left.
@@ -55,7 +55,6 @@ object Main extends App {
     mySparkConf.set("spark-serializer", "org.apache.spark.serializer.KryoSerializer")
     mySparkConf.set("spark.kryoserializer.buffer.max", "2047")
     mySparkConf.registerKryoClasses(Array(classOf[Point]))
-    //ImageIO.write(image, "png", new File("mappa1.png"))
     val mainFolderPath = conf.mainFolder.apply().getAbsolutePath()
 
     val sc = SparkSession
@@ -67,7 +66,7 @@ object Main extends App {
     //var inFileEditsPath = conf.editsPath.apply().getAbsolutePath
     //val inFileLocationsPath = conf.ip2locationPath.apply().getAbsolutePath
     val locationsRDD: RDD[(Long, String)] =
-      DataLoader.loadLocations(conf.ip2LocationPath, separator = "\",\"") // location into RDD
+    DataLoader.loadLocations(conf.ip2LocationPath, separator = "\",\"") // location into RDD
 
 
     // ========================================================================
@@ -83,7 +82,7 @@ object Main extends App {
         sc.broadcast(locationsRDD.keys.collect.sorted) // broadcast array through clusters
 
       associateIps(editsRDD, longIps)
-      // RDD[(String, List[Long])] // (category, List of ips)
+        // RDD[(String, List[Long])] // (category, List of ips)
         .map { case (category, ips) => s"${category}#${ips.mkString("|")}" }
         //.map(x => x._1 + "#" + x._2.mkString("|"))
         .saveAsTextFile(conf.outCategoriesIps, classOf[BZip2Codec])
@@ -96,7 +95,7 @@ object Main extends App {
     //  where "k" is the number of the clusters and "e" is the epsilon to be used for the termination condition
     // =================================================================================================================
     val locationsMap: Broadcast[Map[Long, String]] =
-      sc.broadcast(locationsRDD.collect.toMap) // broadcast array through clusters
+    sc.broadcast(locationsRDD.collect.toMap) // broadcast array through clusters
 
     ////val reg = ".*_war(s)?_.*".r
     val catFilter = conf.words.apply()
@@ -119,63 +118,129 @@ object Main extends App {
     val k = conf.k.apply()
     val epsilon = conf.epsilon.apply()
 
-    val points = DataLoader.loadPoints(outFileName + "/part-00[0-5]*", '|') // ip to coordinates
-      // RDD [Long]
-      .map(
-        ip => {
-          val locationString = locationsMap.value(ip)
-          val location = locationString.split('|')
-          val latitude = location(locationColumns.latitude.id)
-          val longitude = location(locationColumns.longitude.id)
-          new Point(longitude.toDouble, latitude.toDouble)
+    val catPtsRDD = DataLoader.loadPoints(outFileName + "/part-00[0-5]*", '|') // ip to coordinates
+      // RDD[(String, List[Long])]
+      .mapValues(
+        ips => {
+          ips.map(ip => {
+            val locationString = locationsMap.value(ip)
+            val location = locationString.split('|')
+            val latitude = location(locationColumns.latitude.id)
+            val longitude = location(locationColumns.longitude.id)
+            new Point(longitude.toDouble, latitude.toDouble)
+          })
         }
       )
-      // RDD [Point]
+    // RDD[(String, List[Point])]
 
-    System.err.println("Number of points: " + points.collect.length + "\n")
+    val pts = catPtsRDD
+      // RDD[(String, List[Point])]
+      .flatMap { case (_, pts) => pts }
+    // RDD [Point]
 
-    val centroids = points.takeSample(withReplacement = false, k)
+    System.err.println("Number of points: " + pts.collect.length + "\n")
+
+    val centroids = pts.takeSample(withReplacement = false, k)
     System.err.println("Generated centroids: " + centroids.mkString("(", ", ", ")"))
 
     // Performe the k-means
-    val mkmeans = new My_KMeans(masterURL, points)
+    val mkmeans = new My_KMeans(masterURL, pts)
     val resultCentroids = mkmeans.clusterize(k, centroids, epsilon)
     System.err.println(resultCentroids.map(centroid => "%3f,%3f\n".format(centroid.x, centroid.y)).mkString)
-//    System.err.println("Result centroids: " + resultCentroids.mkString("(", ", ", ")"))
+    //    System.err.println("Result centroids: " + resultCentroids.mkString("(", ", ", ")"))
 
 
-    val groups = points
+    // Group the points into clusters
+    val groups = pts
       // RDD[Point]
-      .map(point => (mkmeans.KMeansHelper.closestCentroid(resultCentroids, point), List(point)))
+      .map(pt => (mkmeans.KMeansHelper.closestCentroid(resultCentroids, pt), List(pt)))
       // RDD[(Point, List[Point])]
       .reduceByKey(_ ::: _)
       // RDD[(Point, List[Point])]
-      .map { case (point, points) => (resultCentroids.indexOf(point), points) }
-      // RDD[(Int, List[Points])]
-      .collect()
-      // Array[(Int, List[Point])]
+      .map { case (pt, pts) => (resultCentroids.indexOf(pt), pts) }
+    // RDD[(Int, List[Points])]
+    //.collect()
+    // Array[(Int, List[Point])] //Array[(centroidIndex, List[closest points]
 
 
     // ========================================
-    // Print map
+    // Count clusters categories
     //
     // =================================================================================================================
-    val image = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
-    val graphics = image.createGraphics
-    graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-    // draw map
-    val imageFile = Main.getClass.getClassLoader.getResourceAsStream(conf.backgroundImageFileName)
-    val imageFileBoundaries = Main.getClass.getClassLoader.getResourceAsStream(conf.foregroundBoundaries)
-    val groupColors = for (group <- 0 until k) yield WorldMap.generateColor(group, k)
-    WorldMap.drawMapBackground(imageFile, graphics, conf.imageWidth, conf.imageHeight)
-    WorldMap.drawIps(groups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
-    WorldMap.drawMapBackground(imageFileBoundaries, graphics, conf.imageWidth, conf.imageHeight)
-    WorldMap.drawCentroid(resultCentroids, graphics, conf.imageWidth, conf.imageHeight, groupColors)
-    WorldMap.drawIpsCounts(groups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
-    // write image to disk
-    ImageIO.write(image, conf.imageFormat, new File(mainFolderPath + "/map" + "-" + catFilter.mkString("_") + ".png"))
+    val catPtsCount = catPtsRDD
+      // RDD[(String, List[Point])]
+      .map {
+        case (cat, pts) => {
+          val ptsOccurences = pts.groupBy(pt => pt).mapValues(_.size).toList
+          (cat, ptsOccurences)
+        }
+      }
+      // RDD[(String, List[(Point, Int)])]
+      .flatMap {
+        case (cat, ptsOccurrences) =>
+          ptsOccurrences.map(po => (po._1, (cat, po._2)))
+      }
+      // RDD[(Point, List[(String, Int)])]
+      .map(t => (t._1, List(t._2)))
+      .reduceByKey(_ ::: _)
+    // RDD[(Point, List[(String, Int)])]
 
+    val pts2CatsBroad: Broadcast[Map[Point, List[(String, Int)]]] =
+      sc.broadcast(catPtsCount.collect.toMap) // broadcast array through clusters
+
+    val groupsCats = groups
+      // RDD[(Int, List[Point])]
+      .mapValues(pts => pts distinct) // remove the duplicates (they are already considered on the pts2CatsBroad)
+      .mapValues(
+        pts => {
+          pts.flatMap(pt => {
+            pts2CatsBroad.value(pt)
+          })
+        }
+      )
+    // RDD[(Int, List[(String, Int)])]
+      .map { case (group, cats) =>
+        (group, cats.groupBy(_._1).mapValues(_.map(_._2).sum).toList)
+      }
+    // RDD[(Int, List[(String, Int)])]
+
+    //groupsCats.foreach(println)
+
+    val mainCats =
+      groupsCats.mapValues(
+        cats => cats.reduce((x, y) => if (x._2 >= y._2) x else y)
+      )
+    // RDD[(Int, (String, Int))]
+    mainCats.foreach(println)
+
+
+
+
+    if(true) {
+
+      // ========================================
+      // Print map
+      //
+      // =================================================================================================================
+      val image = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
+      val graphics = image.createGraphics
+      graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+      // draw map
+      val localGroups = groups.collect()
+      val imageFile = Main.getClass.getClassLoader.getResourceAsStream(conf.backgroundImageFileName)
+      val imageFileBoundaries = Main.getClass.getClassLoader.getResourceAsStream(conf.foregroundBoundaries)
+      val groupColors = for (group <- 0 until k) yield WorldMap.generateColor(group, k)
+      WorldMap.drawMapBackground(imageFile, graphics, conf.imageWidth, conf.imageHeight)
+      WorldMap.drawIps(localGroups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+      WorldMap.drawMapBackground(imageFileBoundaries, graphics, conf.imageWidth, conf.imageHeight)
+      WorldMap.drawCentroid(resultCentroids, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+      WorldMap.drawIpsCounts(localGroups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+      WorldMap.writeTopCategories(mainCats.collect(), graphics, conf.imageWidth, conf.imageHeight, groupColors)
+      // write image to disk
+      ImageIO.write(image, conf.imageFormat, new File(mainFolderPath + "/map" + "-" + catFilter.mkString("_") + ".png"))
+    }
   }
 
 
@@ -256,11 +321,18 @@ object Main extends App {
 
   //}
 
-  // def distinct[A](list: Iterable[A]): List[A] =
-  //   list.foldLeft(List[A]()) {
-  //     case (acc, item) if acc.contains(item) => acc
-  //     case (acc, item) => item :: acc
-  //   }
-  // }
+  //TODO
+  /**
+   *
+   * @param list
+   * @tparam A
+   * @return
+   */
+  def distinct[A](list: Iterable[A]): List[A] = {
+    list.foldLeft(List[A]()) {
+      case (acc, item) if acc.contains(item) => acc
+      case (acc, item) => item :: acc
+    }
+  }
 
 }
