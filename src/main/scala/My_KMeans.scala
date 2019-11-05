@@ -5,8 +5,9 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import Model._
+import org.apache.commons.math3.genetics.StoppingCondition
 
-class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
+class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iterations: Int) extends Serializable {
 
   points.persist(StorageLevel.MEMORY_AND_DISK)
   System.err.println("Read " + points.count() + " points.")
@@ -31,13 +32,32 @@ class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
     def closestCentroid(centroids: Array[Point], point: Point) = {
       centroids.reduceLeft((a, b) => if ((point distance a) < (point distance b)) a else b)
     }
+
+    def stopCondIterations(centroids: Array[Point], newCentroids: Array[Point], it: Int): Boolean = {
+      // Calculate the centroid movement for the stopping condition
+      val movement = (centroids zip newCentroids).map({ case (a, b) => a distance b })
+      printInfo(movement, it)
+      // Iterate if iterations is lower than the threshold
+      if (it < iterations-1) true
+      else false
+    }
+
+    def stopCondVariance(centroids: Array[Point], newCentroids: Array[Point], it: Int): Boolean = {
+      // Calculate the centroid movement for the stopping condition
+      val movement = (centroids zip newCentroids).map({ case (a, b) => a distance b })
+      printInfo(movement, it)
+      // Iterate if movement exceeds threshold
+      if (movement.exists(_ > epsilon)) true
+      else false
+    }
+
+    def printInfo(movement: Array[Double], it: Int) = {
+      System.err.println("Iteration: " + it + "\t" + "Centroids changed by\t" + movement.map(d => "%3f".format(d)).mkString("(", ", ", ")"))
+    }
   }
 
-
-  def clusterize(clusterNumbers: Int, startCentroids: Array[Point], epsilon: Double) = {
-    /**
-     * Start the k-means algorithm
-     */
+  def clusterize(clusterNumbers: Int, startCentroids: Array[Point],
+                 stopCondition: (Array[Point], Array[Point], Int) => Boolean) = {
     // Use the given centroids, or initialize k random ones
     val centroids = (
       if (startCentroids.length == clusterNumbers)
@@ -46,12 +66,12 @@ class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
         Array.fill(clusterNumbers) { Point.random }
       )
 
-    kmeans(centroids, epsilon)
+    kmeans(centroids, 0, stopCondition)
     // Array[Point]
 
   }
 
-  def kmeans(centroids: Array[Point], epsilon: Double): Array[Point] = {
+  def kmeans(centroids: Array[Point], it: Int, stopF: (Array[Point], Array[Point], Int) => Boolean): Array[Point] = {
     /**
      *
      */
@@ -83,18 +103,21 @@ class My_KMeans(masterURL: String, points: RDD[Point]) extends Serializable {
       }
     })
 
-    // Calculate the centroid movement for the stopping condition
-    val movement = (centroids zip newCentroids).map({ case (a, b) => a distance b })
+    if (stopF(centroids, newCentroids, it)) kmeans(newCentroids, it+1, stopF)
+    else newCentroids
 
-    System.err.println("Centroids changed by\n" +
-      "\t   " + movement.map(d => "%3f".format(d)).mkString("(", ", ", ")") + "\n" +
-      "\tto " + newCentroids.mkString("(", ", ", ")"))
+    //// Calculate the centroid movement for the stopping condition
+    //val movement = (centroids zip newCentroids).map({ case (a, b) => a distance b })
 
-    // Iterate if movement exceeds threshold
-    if (movement.exists(_ > epsilon))
-      kmeans(newCentroids, epsilon)
-    else
-      newCentroids
+    //System.err.println("Centroids changed by\n" +
+    //  "\t   " + movement.map(d => "%3f".format(d)).mkString("(", ", ", ")") + "\n" +
+    //  "\tto " + newCentroids.mkString("(", ", ", ")"))
+
+    //// Iterate if movement exceeds threshold
+    //if (movement.exists(_ > epsilon))
+    //  kmeans(newCentroids, epsilon)
+    //else
+    //  newCentroids
   }
 
 }

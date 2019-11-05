@@ -3,24 +3,23 @@ package MyConf
 import java.io.File
 import org.rogach.scallop.ScallopConf
 
-//-a -i /home/enrico/datasets/IP2LOCATION-LITE-DB9.CSV.bz2 -e /home/enrico/datasets/enwiki-longIp.bz2 -o /home/enrico/datasets/outputTest
 class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
 
-  val associateLocation = opt[Boolean](
+  val associate_location = opt[Boolean](
     descr = "Perform the association phase"
   )
 
-  val filterCategories = opt[Boolean](
-    descr = "", //TODO
+  val filter_categories = opt[Boolean](
+    descr = "Perform the filter",
     required = true
   )
 
-  val mainFolder = opt[File](
+  val main_folder = opt[File](
     argName = "folder path",
     descr = "resources files folder",
     required = true
   )
-  validateFileIsDirectory(mainFolder)
+  validateFileIsDirectory(main_folder)
 
   //val ip2locationPath = opt[File](
   //  argName = "ip2location path",
@@ -43,27 +42,33 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   //validateFileDoesNotExist(outLocationsPath)
 
   val words = opt[List[String]](
-    argName = "filter words",
-    descr = "Comma separated filter words.",
+    argName = "required words",
+    descr = "Comma separated required words.",
     required = true
+  )
+
+  val no_words = opt[List[String]](
+    argName = "excluded words",
+    descr = "Comma separated excluded words.",
+    default = Some(List[String]())
   )
 
   val k = opt[Int](
     argName = "clusters",
     descr = "Number of clusters to create.",
-    validate = (arg) => arg>=0,
+    validate = (arg) => arg >= 0,
     default = Some(0)
   )
 
   val iterations = opt[Int](
     descr = "Number of iterations that the clustering algorythm will be run for.",
-    validate = (arg) => arg>=0,
+    validate = (arg) => arg >= 0,
     default =  Some(0)
   )
 
   val epsilon = opt[Double](
-    descr = "", //TODO
-    validate = (arg) => arg>=0.0,
+    descr = "Variance improvement threshold",
+    validate = (arg) => arg >= 0.0,
     default =  Some(0.01)
   )
 
@@ -89,8 +94,8 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
 
   verify()
 
-  val ip2LocationPath = mainFolder.apply().getAbsolutePath + "/IP2LOCATION-LITE-DB9.CSV.bz2"
-  val editsPath = mainFolder.apply().getAbsolutePath + "/enwiki-longIpOnly.bz2"
-  val outCategoriesIps = mainFolder.apply().getAbsolutePath + "/catIpsFinal"
+  val ip2LocationPath = main_folder.apply().getAbsolutePath + "/IP2LOCATION-LITE-DB9.CSV.bz2"
+  val editsPath = main_folder.apply().getAbsolutePath + "/enwiki-longIpOnly.bz2"
+  val outCategoriesIps = main_folder.apply().getAbsolutePath + "/catIpsFinal"
 }
 

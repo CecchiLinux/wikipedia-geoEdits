@@ -3,7 +3,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.hadoop.io.compress.BZip2Codec
 import org.apache.spark.broadcast.Broadcast
 import javax.imageio.ImageIO
-import java.awt.{Color, Graphics, RenderingHints}
+import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.File
 
@@ -19,20 +19,23 @@ object Main extends App {
     val classIp, countryCode, countryName, regionName, city, latitude, longitude = Value
   }
 
-  implicit class CSVWrapper(val prod: Product) extends AnyVal {
-    def toCSV(): String = prod.productIterator.map {
-      case Some(value) => value
-      case None => ""
-      case rest => rest
-    }.mkString("|")
-  }
+  //implicit class CSVWrapper(val prod: Product) extends AnyVal {
+  //  def toCSV(separator: String): String = prod.productIterator.map {
+  //    case Some(value) => value
+  //    case None => ""
+  //    case rest => rest
+  //  }.mkString(separator)
+  //}
 
-  def checker[T <: Long](target: T, ips: Array[T]): T = {
+  def checker[T](target: T, ips: Array[T])(implicit ev: T => Ordered[T]): T = {
+    // specify that the method applies to all types for which an ordering exists
     /**
      * Dichotomic search: search for the target element through the array.
      * Return the target element if present or the nearest smaller element on the left.
      * Thought for the interval research of the target.
      */
+
+    // tail-recursive binary search for name in names
     def search(start: Int = 0, end: Int = ips.length - 1): T = {
       val mid = start + (end - start) / 2
       if (start > end) ips(start - 1)
@@ -44,9 +47,9 @@ object Main extends App {
     search()
   }
 
+
   override def main(args: Array[String]): Unit = {
 
-    // ===================== conf
     val conf = new Conf(args)
     val mySparkConf = new SparkConf()
     val masterURL = conf.masterURL.apply()
@@ -55,7 +58,7 @@ object Main extends App {
     mySparkConf.set("spark-serializer", "org.apache.spark.serializer.KryoSerializer")
     mySparkConf.set("spark.kryoserializer.buffer.max", "2047")
     mySparkConf.registerKryoClasses(Array(classOf[Point]))
-    val mainFolderPath = conf.mainFolder.apply().getAbsolutePath()
+    val mainFolderPath = conf.main_folder.apply().getAbsolutePath()
 
     val sc = SparkSession
       .builder()
@@ -66,16 +69,17 @@ object Main extends App {
     //var inFileEditsPath = conf.editsPath.apply().getAbsolutePath
     //val inFileLocationsPath = conf.ip2locationPath.apply().getAbsolutePath
     val locationsRDD: RDD[(Long, String)] =
-    DataLoader.loadLocations(conf.ip2LocationPath, separator = "\",\"") // location into RDD
+      DataLoader.loadLocations(conf.ip2LocationPath, separator = "\",\"") // location into RDD
 
 
     // ========================================================================
+    // Phase 1 - Assign location to each edit
     // -a option | From raw Edits to Categories with Ips
     // From: (artId, revId, artName, ip, categories, entity, longIp)
     // To: (single category, List(classIp))
     //  where classIp is the class associated to the original longIp
     // =================================================================================================================
-    if (conf.associateLocation.apply()) {
+    if (conf.associate_location.apply()) {
       val editsRDD: RDD[(String, Edit)] =
         DataLoader.loadEdits(conf.editsPath, separator = '|') // edits into RDD
       val longIps: Broadcast[Array[Long]] =
@@ -84,41 +88,43 @@ object Main extends App {
       associateIps(editsRDD, longIps)
         // RDD[(String, List[Long])] // (category, List of ips)
         .map { case (category, ips) => s"${category}#${ips.mkString("|")}" }
-        //.map(x => x._1 + "#" + x._2.mkString("|"))
         .saveAsTextFile(conf.outCategoriesIps, classOf[BZip2Codec])
     }
 
 
     // ========================================================================
-    // Filter category by input words, perform the k-means, print sub categories in the map
+    // Phase 2 - Filter category by input words, perform the k-means, print sub categories in the map
     // -w <words to include> -k <k> -e <e>
     //  where "k" is the number of the clusters and "e" is the epsilon to be used for the termination condition
     // =================================================================================================================
     val locationsMap: Broadcast[Map[Long, String]] =
-    sc.broadcast(locationsRDD.collect.toMap) // broadcast array through clusters
+     sc.broadcast(locationsRDD.collect.toMap) // broadcast array through clusters
 
     ////val reg = ".*_war(s)?_.*".r
-    val catFilter = conf.words.apply()
-    val outFileName = mainFolderPath + "/filters-" + catFilter.mkString("_") // es. filters-italian_food
+    val filterWords = conf.words.apply()
+    val excludedWords = conf.no_words.apply()
+    var outFolderName = mainFolderPath + "/filters-" + filterWords.mkString("_") // es. filters-italian_food
+    if (excludedWords.length > 0) outFolderName += "-" + excludedWords.mkString("_")
 
-    if (conf.filterCategories.apply()) {
+    if (conf.filter_categories.apply()) {
       val editsRDD: RDD[String] = sc.textFile(conf.outCategoriesIps + "/part-00[0-5]*")
-      filterCategories(catFilter, editsRDD)
+      filterCategories(filterWords, excludedWords, editsRDD)
         // RDD[(String, String)]
-        .map { case (category, ips) => s"${category}#${ips}" }
-        //.map(x => s"${x._1}#${x._2}")
-        .coalesce(1, true).saveAsTextFile(outFileName)
+        .map { case (category, ips) => s"${category}#${ips}" } // # is a free symbol for the dataset
+        .coalesce(1, true).saveAsTextFile(outFolderName)
     }
 
 
     // ========================================
-    // K-Means
+    // Phase 2.1 - K-Means
     //
     // =================================================================================================================
     val k = conf.k.apply()
+    val iterations = conf.iterations.apply()
     val epsilon = conf.epsilon.apply()
 
-    val catPtsRDD = DataLoader.loadPoints(outFileName + "/part-00[0-5]*", '|') // ip to coordinates
+    // assigns points to categories
+    val catPtsRDD = DataLoader.loadPoints(outFolderName + "/part-00[0-5]*", '|') // ip to coordinates
       // RDD[(String, List[Long])]
       .mapValues(
         ips => {
@@ -131,23 +137,26 @@ object Main extends App {
           })
         }
       )
-    // RDD[(String, List[Point])]
+    // RDD[(String, List[Point])] // (category, (point1, point2, ...))
 
+    // kmeans input parameters: points and initial centroids
     val pts = catPtsRDD
       // RDD[(String, List[Point])]
       .flatMap { case (_, pts) => pts }
     // RDD [Point]
-
     System.err.println("Number of points: " + pts.collect.length + "\n")
 
     val centroids = pts.takeSample(withReplacement = false, k)
-    System.err.println("Generated centroids: " + centroids.mkString("(", ", ", ")"))
+    // System.err.println("Generated centroids: " + centroids.mkString("(", ", ", ")"))
 
-    // Performe the k-means
-    val mkmeans = new My_KMeans(masterURL, pts)
-    val resultCentroids = mkmeans.clusterize(k, centroids, epsilon)
-    System.err.println(resultCentroids.map(centroid => "%3f,%3f\n".format(centroid.x, centroid.y)).mkString)
-    //    System.err.println("Result centroids: " + resultCentroids.mkString("(", ", ", ")"))
+
+    val mkmeans = new My_KMeans(masterURL, pts, epsilon, iterations)
+
+    val resultCentroids = {
+      if (iterations > 0) mkmeans.clusterize(k, centroids, mkmeans.KMeansHelper.stopCondIterations)
+      else mkmeans.clusterize(k, centroids, mkmeans.KMeansHelper.stopCondVariance)
+    }
+    System.err.println(resultCentroids.map(c => "%3f,%3f\n".format(c.x, c.y)).mkString)
 
 
     // Group the points into clusters
@@ -159,12 +168,11 @@ object Main extends App {
       // RDD[(Point, List[Point])]
       .map { case (pt, pts) => (resultCentroids.indexOf(pt), pts) }
     // RDD[(Int, List[Points])]
-    //.collect()
-    // Array[(Int, List[Point])] //Array[(centroidIndex, List[closest points]
+
 
 
     // ========================================
-    // Count clusters categories
+    // Phase 2.2 - Count clusters categories
     //
     // =================================================================================================================
 
@@ -205,8 +213,6 @@ object Main extends App {
       }
     // RDD[(Int, List[(String, Int)])]
 
-    //groupsCats.foreach(println)
-
     val mainCats =
       groupsCats.mapValues(
         cats => cats.reduce((x, y) => if (x._2 >= y._2) x else y)
@@ -214,38 +220,44 @@ object Main extends App {
     // RDD[(Int, (String, Int))]
     mainCats.foreach(println)
 
+    mainCats.map {
+      case (cluster, (cat, number)) => {
+        val latitude = resultCentroids(cluster).y
+        val longitude = resultCentroids(cluster).x
+        s"${latitude},${longitude},${cat},${number}"
+      }
+    }.coalesce(1, true).saveAsTextFile(outFolderName + "/mainCats.csv")
 
 
+    // ========================================
+    // Phase 3 - Print the map
+    //
+    // =================================================================================================================
+    val image = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
+    val graphics = image.createGraphics
+    graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-    if(true) {
-
-      // ========================================
-      // Print map
-      //
-      // =================================================================================================================
-      val image = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
-      val graphics = image.createGraphics
-      graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-
-      // draw map
-      val localGroups = groups.collect()
-      val imageFile = Main.getClass.getClassLoader.getResourceAsStream(conf.backgroundImageFileName)
-      val imageFileBoundaries = Main.getClass.getClassLoader.getResourceAsStream(conf.foregroundBoundaries)
-      val groupColors = for (group <- 0 until k) yield WorldMap.generateColor(group, k)
-      WorldMap.drawMapBackground(imageFile, graphics, conf.imageWidth, conf.imageHeight)
-      WorldMap.drawIps(localGroups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
-      WorldMap.drawMapBackground(imageFileBoundaries, graphics, conf.imageWidth, conf.imageHeight)
-      WorldMap.drawCentroid(resultCentroids, graphics, conf.imageWidth, conf.imageHeight, groupColors)
-      WorldMap.drawIpsCounts(localGroups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
-      WorldMap.writeTopCategories(mainCats.collect(), graphics, conf.imageWidth, conf.imageHeight, groupColors)
-      // write image to disk
-      ImageIO.write(image, conf.imageFormat, new File(mainFolderPath + "/map" + "-" + catFilter.mkString("_") + ".png"))
-    }
+    // draw map
+    val localGroups = groups.collect()
+    val imageFile = Main.getClass.getClassLoader.getResourceAsStream(conf.backgroundImageFileName)
+    val imageFileBoundaries = Main.getClass.getClassLoader.getResourceAsStream(conf.foregroundBoundaries)
+    val groupColors = for (group <- 0 until k) yield WorldMap.generateColor(group, k) // select a color for each cluster
+    WorldMap.drawMapBackground(imageFile, graphics, conf.imageWidth, conf.imageHeight)
+    WorldMap.drawIps(localGroups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+    WorldMap.drawMapBackground(imageFileBoundaries, graphics, conf.imageWidth, conf.imageHeight)
+    WorldMap.drawCentroid(resultCentroids, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+    WorldMap.drawIpsCounts(resultCentroids, localGroups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+    WorldMap.writeTopCategories(mainCats.collect(), graphics, conf.imageWidth, conf.imageHeight, groupColors)
+    // write image to disk
+    ImageIO.write(image, conf.imageFormat, new File(outFolderName + "/map.png"))
   }
 
 
-  def filterCategories(catFilter: List[String], editsRDD: RDD[String]) = {
-
+  def filterCategories(filterWords: List[String], excludedWords: List[String], editsRDD: RDD[String]) = {
+    /**
+     * Select from the edits the categories that contain the filterWords
+     * Exclude the categories that contain the excludedWords
+     */
     // val reg = ".*_world_war_ii_.*".r
     editsRDD.map(line => line.split('#'))
       // RDD[ Array[ String ]
@@ -255,8 +267,8 @@ object Main extends App {
         (category, ips)
       })
       // RDD [String, String]
-      //.filter(x => reg.r.pattern.matcher(x._1).matches)
-      .filter(x => catFilter.forall(f => x._1.split("_").contains(f))) // filter categories that contain all the words
+      .filter(x => filterWords.forall(f => x._1.split("_").contains(f))) // filter categories that contain all the words
+      .filter(x => excludedWords.forall(f => !x._1.split("_").contains(f)))
 
   }
 
@@ -321,13 +333,6 @@ object Main extends App {
 
   //}
 
-  //TODO
-  /**
-   *
-   * @param list
-   * @tparam A
-   * @return
-   */
   def distinct[A](list: Iterable[A]): List[A] = {
     list.foldLeft(List[A]()) {
       case (acc, item) if acc.contains(item) => acc

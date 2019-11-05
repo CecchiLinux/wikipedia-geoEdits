@@ -44,7 +44,7 @@ object WorldMap {
       }
   }
 
-  def drawCentroid(coordinates: Seq[Point],graphics: Graphics, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
+  def drawCentroid(coordinates: Seq[Point], graphics: Graphics, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
     for (group <- 0 until coordinates.length) {
       val (x, y) = toImageCoordinates(coordinates(group).x, coordinates(group).y, imageWidth, imageHeight)
       val color = groupColors(group)
@@ -55,7 +55,7 @@ object WorldMap {
     }
   }
 
-  def drawIpsCounts(ips: Seq[(Int, List[Point])], graphics: Graphics2D, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
+  def drawIpsCounts(resultCentroids: Seq[Point], ips: Seq[(Int, List[Point])], graphics: Graphics2D, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
     graphics.setColor(Color.WHITE)
     val numberFormat = NumberFormat.getNumberInstance(Locale.US)
     val font = new Font(Font.SANS_SERIF, Font.BOLD, 18)
@@ -63,7 +63,7 @@ object WorldMap {
     for ((group, coordinates) <- ips) {
       val ipsCount = numberFormat.format(coordinates.size)
       val bound = font.getStringBounds(ipsCount, graphics.getFontRenderContext)
-      val (x, y) = toImageCoordinates(coordinates(group).x, coordinates(group).y, imageWidth, imageHeight)
+      val (x, y) = toImageCoordinates(resultCentroids(group).x, resultCentroids(group).y, imageWidth, imageHeight)
       // draw text shadow
       graphics.setColor(Color.BLACK)
       graphics.drawString(ipsCount, (x - bound.getWidth / 2).toInt + 1, (y + bound.getHeight + 10).toInt + 1)
@@ -83,7 +83,8 @@ object WorldMap {
       graphics.setColor(color)
       graphics.fillRect(10, imageHeight / 2 + offset*i, 20, 20)
       graphics.setColor(Color.WHITE)
-      graphics.drawString(cat._1.replace("_", " "), 38, imageHeight / 2 + offset*i + 18)
+      graphics.drawRect(10, imageHeight / 2 + offset*i, 20, 20)
+      graphics.drawString(cat._1.replace("_", " ") + " " + cat._2.toString, 38, imageHeight / 2 + offset*i + 18)
       i = i+1
     }
 
