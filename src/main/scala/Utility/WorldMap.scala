@@ -1,13 +1,12 @@
 package Utility
 
 import java.awt.{Color, Font, Graphics, Graphics2D}
-import java.io.{File, InputStream}
+import java.io.InputStream
 import java.text.NumberFormat
 import java.util.Locale
 
 import Model.Point
 import javax.imageio.ImageIO
-import javax.swing.{BoxLayout, JPanel}
 
 object WorldMap {
 
@@ -61,7 +60,7 @@ object WorldMap {
     val font = new Font(Font.SANS_SERIF, Font.BOLD, 18)
     graphics.setFont(font)
     for ((group, coordinates) <- ips) {
-      val ipsCount = numberFormat.format(coordinates.size)
+      val ipsCount = "(" + group.toString() + ") " + numberFormat.format(coordinates.size)
       val bound = font.getStringBounds(ipsCount, graphics.getFontRenderContext)
       val (x, y) = toImageCoordinates(resultCentroids(group).x, resultCentroids(group).y, imageWidth, imageHeight)
       // draw text shadow
@@ -80,12 +79,17 @@ object WorldMap {
 
     for ((group, cat) <- topCats) {
       val color = groupColors(group)
+      val string = "(" + group.toString + ") " + cat._1.replace("_", " ") + " " + cat._2.toString
+      val currentHeight = if (topCats.length <= 15) imageHeight / 2 + offset*i else imageHeight / 3 + offset*i
       graphics.setColor(color)
-      graphics.fillRect(10, imageHeight / 2 + offset*i, 20, 20)
+      graphics.fillRect(10, currentHeight, 20, 20)
       graphics.setColor(Color.WHITE)
-      graphics.drawRect(10, imageHeight / 2 + offset*i, 20, 20)
-      graphics.drawString(cat._1.replace("_", " ") + " " + cat._2.toString, 38, imageHeight / 2 + offset*i + 18)
-      i = i+1
+      graphics.drawRect(10, currentHeight, 20, 20)
+      graphics.setColor(Color.BLACK)
+      graphics.drawString(string, 38 + 1, currentHeight + 18 + 1)
+      graphics.setColor(Color.WHITE)
+      graphics.drawString(string, 38, currentHeight + 18)
+      i = i + 1
     }
 
   }

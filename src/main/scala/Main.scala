@@ -12,6 +12,7 @@ import Utility.{DataLoader, WorldMap}
 import Model._
 import My_KMeans._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 object Main extends App {
 
@@ -64,7 +65,7 @@ object Main extends App {
       .builder()
       .config(mySparkConf)
       .getOrCreate().sparkContext
-    sc.setLogLevel("ERROR")
+    //sc.setLogLevel("ERROR")
 
     //var inFileEditsPath = conf.editsPath.apply().getAbsolutePath
     //val inFileLocationsPath = conf.ip2locationPath.apply().getAbsolutePath
@@ -85,9 +86,28 @@ object Main extends App {
       val longIps: Broadcast[Array[Long]] =
         sc.broadcast(locationsRDD.keys.collect.sorted) // broadcast array through clusters
 
-      associateIps(editsRDD, longIps)
+      //// === partial run
+      //val firstEdits = sc.parallelize(editsRDD.take(20))
+      //val editsWithIpClass = firstEdits.mapValues {
+      //  case edit: Edit => (checker(edit.longIp, longIps.value), edit)
+      //}
+      //// === full run
+      val editsWithIpRDD = editsRDD.mapValues { case edit: Edit => (checker(edit.longIp, longIps.value), edit) }
+        // RDD[ String, (Long, Edit) ]
+        .values.flatMap(
+        // RDD[ Long, Edit ]
+        edit => {
+          val categoriesString = edit._2.categories
+          val categories = categoriesString.split(' ')
+          val ipClass = edit._1
+          categories.map(category => (category, ipClass))
+        })
+        // RDD[ ( String, Long ) ]
+        .map(t => (t._1, List(t._2)))
+        .reduceByKey(_ ::: _)
         // RDD[(String, List[Long])] // (category, List of ips)
-        .map { case (category, ips) => s"${category}#${ips.mkString("|")}" }
+
+      editsWithIpRDD.map { case (category, ips) => s"${category}#${ips.mkString("|")}" }
         .saveAsTextFile(conf.outCategoriesIps, classOf[BZip2Codec])
     }
 
@@ -100,7 +120,6 @@ object Main extends App {
     val locationsMap: Broadcast[Map[Long, String]] =
      sc.broadcast(locationsRDD.collect.toMap) // broadcast array through clusters
 
-    ////val reg = ".*_war(s)?_.*".r
     val filterWords = conf.words.apply()
     val excludedWords = conf.no_words.apply()
     var outFolderName = mainFolderPath + "/filters-" + filterWords.mkString("_") // es. filters-italian_food
@@ -157,7 +176,6 @@ object Main extends App {
       else mkmeans.clusterize(k, centroids, mkmeans.KMeansHelper.stopCondVariance)
     }
     System.err.println(resultCentroids.map(c => "%3f,%3f\n".format(c.x, c.y)).mkString)
-
 
     // Group the points into clusters
     val groups = pts
@@ -268,7 +286,7 @@ object Main extends App {
       })
       // RDD [String, String]
       .filter(x => filterWords.forall(f => x._1.split("_").contains(f))) // filter categories that contain all the words
-      .filter(x => excludedWords.forall(f => !x._1.split("_").contains(f)))
+      .filter(x => excludedWords.forall(f => !(x._1.split("_").contains(f))))
 
   }
 

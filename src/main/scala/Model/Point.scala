@@ -14,7 +14,7 @@ class Point(val x: Double, val y: Double) extends Serializable {
       case _ => false
     }
   }
-  override def hashCode(): Int = {
+  override def hashCode(): Int = { // Serialization needs this
     (this.x, this.y).hashCode()
   }
   override def toString = "(" + x.toString + "," + y.toString + ")"
@@ -29,7 +29,6 @@ object Point {
     val minLon = 0.00
     val maxLon = 180.00
     val longitude = minLon + (Math.random * ((maxLon - minLon) + 1)).toDouble
-    val df = new DecimalFormat("#.#####")
     new Point(
       longitude,
       latitude

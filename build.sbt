@@ -7,7 +7,7 @@ scalaVersion := "2.11.12"
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % "2.3.1" % "provided",
   "org.apache.spark" %% "spark-sql" % "2.3.1" % "provided",
-  "org.rogach"   %%   "scallop"   %   "3.1.2"
+  "org.rogach" %% "scallop" % "3.1.2"
 )
 
 //assemblyMergeStrategy in assembly := {

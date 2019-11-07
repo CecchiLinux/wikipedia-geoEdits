@@ -1,0 +1,6 @@
+spark/bin/spark-submit --master spark://54.211.253.66 --driver-memory 25G --executor-memory 28G --executor-cores 8 --class "Main" --deploy-mode client wiki_geo_edits.jar --main_folder /home/ec2-user -a -f --words war --no_words star -k 15 -i 10
+
+mkdir .aws
+vim .aws/credentials
+
+aws s3 cp s3://wikigeoedits/IP2LOCATION-LITE-DB9.CSV.bz2 .
