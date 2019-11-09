@@ -33,14 +33,21 @@ object WorldMap {
   }
 
   def drawIps(ips: Seq[(Int, List[Point])],graphics: Graphics, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
+    var tot_points = 0
+
     for ((group, coordinates) <- ips) {
-        val color = groupColors(group).brighter()
-        graphics.setColor(new Color(color.getRed, color.getGreen, color.getBlue, 50))
-        for (coordinate <- coordinates) {
-          val (x, y) = toImageCoordinates(coordinate.x, coordinate.y, imageWidth, imageHeight)
-          graphics.fillOval(x - 1, y - 1, 4, 4)
-        }
+      val color = groupColors(group).brighter()
+      graphics.setColor(new Color(color.getRed, color.getGreen, color.getBlue, 50))
+      for (coordinate <- coordinates) {
+        val (x, y) = toImageCoordinates(coordinate.x, coordinate.y, imageWidth, imageHeight)
+        graphics.fillOval(x - 1, y - 1, 4, 4)
       }
+     tot_points += coordinates.length
+    }
+
+    graphics.setFont(new Font("Arial Black", Font.BOLD, 20))
+    graphics.setColor(Color.BLACK)
+    graphics.drawString("Tot. points: " + tot_points.toString, imageWidth / 2, imageHeight.toInt - 20)
   }
 
   def drawCentroid(coordinates: Seq[Point], graphics: Graphics, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
@@ -54,19 +61,18 @@ object WorldMap {
     }
   }
 
-  def drawIpsCounts(resultCentroids: Seq[Point], ips: Seq[(Int, List[Point])], graphics: Graphics2D, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
+  def drawIpsCounts(resultCentroids: Seq[Point], ips: Seq[(Int, List[Point])], numbers: Boolean, graphics: Graphics2D, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
     graphics.setColor(Color.WHITE)
     val numberFormat = NumberFormat.getNumberInstance(Locale.US)
     val font = new Font(Font.SANS_SERIF, Font.BOLD, 18)
     graphics.setFont(font)
     for ((group, coordinates) <- ips) {
-      val ipsCount = "(" + group.toString() + ") " + numberFormat.format(coordinates.size)
+      val ipsCount = if (numbers) "(" + group.toString() + ") " + numberFormat.format(coordinates.size) else "(" + group.toString() + ")"
       val bound = font.getStringBounds(ipsCount, graphics.getFontRenderContext)
       val (x, y) = toImageCoordinates(resultCentroids(group).x, resultCentroids(group).y, imageWidth, imageHeight)
       // draw text shadow
       graphics.setColor(Color.BLACK)
       graphics.drawString(ipsCount, (x - bound.getWidth / 2).toInt + 1, (y + bound.getHeight + 10).toInt + 1)
-      // draw text
       graphics.setColor(Color.WHITE)
       graphics.drawString(ipsCount, (x - bound.getWidth / 2).toInt, (y + bound.getHeight + 10).toInt)
     }
@@ -93,5 +99,13 @@ object WorldMap {
     }
 
   }
+
+  def drawInfo(k: Int, iterations: Int, epsilon: Double, words: Array[String], noWords: Array[String], graphics: Graphics, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
+    graphics.setFont(new Font("Arial Black", Font.BOLD, 20))
+    graphics.setColor(Color.BLACK)
+    graphics.drawString("Filter words: " + words.mkString(" "), imageWidth / 2, imageHeight.toInt - 60)
+    graphics.drawString("k: %d,  \tit: %d,  \teps: %.4f".format(k, iterations, epsilon), imageWidth / 2, imageHeight.toInt - 40)
+  }
+
 
 }

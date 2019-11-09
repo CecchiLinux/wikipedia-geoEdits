@@ -18,7 +18,6 @@ object DataLoader {
     .config(mySparkConf)
     .getOrCreate().sparkContext
 
-
   def loadEdits(path: String, separator: Char): RDD[(String, Edit)] = {
     object editColumns extends Enumeration {
       val artId, revId, artName, ip, categories, entity, longIp = Value
@@ -111,21 +110,48 @@ object DataLoader {
     }
   }
 
-  def loadPoints(path: String, separator: Char): RDD[(String, List[Long])] = {
+
+  //def loadCatsWithIps(path: String, separator: Char): RDD[(String, List[Long])] = {
+  //  val categoriesTextRdd = sc.textFile(path)
+  //  // RDD[ String ]
+  //  categoriesTextRdd.map( line => line.split('#') )
+  //    // RDD[ Array[ String ]
+  //    .flatMap( arr => {
+  //      val category = arr(0)
+  //      val ipsString = arr(1)
+  //      val ips = ipsString.split('|')
+  //      ips.map(ip => (category, ip.toLong))
+  //    })
+  //    // RDD[(String, Long)]
+  //    .map( x => (x._1, List(x._2)) )
+  //    .reduceByKey(_ ::: _)
+  //}
+
+  def loadCatsWithIps(path: String, separator: Char): RDD[(String, List[Long])] = {
     val categoriesTextRdd = sc.textFile(path)
-    // RDD[ String ]
-    categoriesTextRdd.map( line => line.split('#') )
-      // RDD[ Array[ String ]
-      .flatMap( arr => {
-        val category = arr(0)
-        val ipsString = arr(1)
-        val ips = ipsString.split('|')
-        ips.map(ip => (category, ip.toLong))
-      })
-      // RDD[(String, Long)]
-      .map( x => (x._1, List(x._2)) )
-      .reduceByKey(_ ::: _)
+    // RDD[String ]
+    categoriesTextRdd.map(line => {
+      val arr = line.split('#')
+      val category = arr(0).toLowerCase
+      val ipsString = arr(1)
+      val ips = ipsString.split('|')
+      (category, ips.map(_.toLong).toList)
+    })
   }
+
+  //def loadCatsWithIps(path: String, separator: Char): RDD[(String, List[Long])] = {
+  //  val categoriesTextRdd = sc.textFile(path)
+  //  // RDD[String ]
+  //  categoriesTextRdd.map( line => line.split('#') )
+  //    // RDD[Array[String]]
+  //    .map( arr => {
+  //      val category = arr(0)
+  //      val ipsString = arr(1)
+  //      val ips = ipsString.split('|')
+  //      (category, ips.map(_.toLong).toList)
+  //    })
+  //}
+
 
   //def loadPoints(path: String, separator: Char) = {
   //  val categoriesTextRdd = sc.textFile(path)

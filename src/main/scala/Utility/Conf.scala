@@ -1,6 +1,7 @@
-package MyConf
+package Utility
 
 import java.io.File
+
 import org.rogach.scallop.ScallopConf
 
 class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
@@ -14,12 +15,12 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
     required = true
   )
 
-  val main_folder = opt[File](
+  val dataset_folder = opt[File](
     argName = "folder path",
     descr = "resources files folder",
     required = true
   )
-  validateFileIsDirectory(main_folder)
+  validateFileIsDirectory(dataset_folder)
 
   //val ip2locationPath = opt[File](
   //  argName = "ip2location path",
@@ -44,7 +45,7 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   val words = opt[List[String]](
     argName = "required words",
     descr = "Comma separated required words.",
-    required = true
+    default = Some(List[String]())
   )
 
   val no_words = opt[List[String]](
@@ -61,7 +62,7 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   )
 
   val iterations = opt[Int](
-    descr = "Number of iterations that the clustering algorythm will be run for.",
+    descr = "Number of iterations that the clustering algorithm will be run for.",
     validate = (arg) => arg >= 0,
     default =  Some(0)
   )
@@ -69,13 +70,12 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   val epsilon = opt[Double](
     descr = "Variance improvement threshold",
     validate = (arg) => arg >= 0.0,
-    default =  Some(0.01)
+    default = Some(0.01)
   )
 
-  //val backgroundImageFileName = "world-map2.png"
-  //val imageFormat = "png"
-  //val imageWidth = 1000
-  //val imageHeight = 500
+  val print_numbers = opt[Boolean](
+    descr = "Print the numbers on the map"
+  )
 
   //val backgroundImageFileName = "Day_lrg_white.png"
   val backgroundImageFileName = "world.png"
@@ -86,7 +86,7 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   val imageHeight = 1000
 
 
-  val masterURL = opt[String](
+  val master_url = opt[String](
     argName = "Master URL",
     descr = "Master URL",
     default = Some("local[*]")
@@ -94,8 +94,8 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
 
   verify()
 
-  val ip2LocationPath = main_folder.apply().getAbsolutePath + "/IP2LOCATION-LITE-DB9.CSV.bz2"
-  val editsPath = main_folder.apply().getAbsolutePath + "/enwiki-longIpOnly.bz2"
-  val outCategoriesIps = main_folder.apply().getAbsolutePath + "/catIpsFinal"
+  val ip2LocationPath = dataset_folder.apply().getAbsolutePath + "/IP2LOCATION-LITE-DB9.CSV.bz2"
+  val editsPath = dataset_folder.apply().getAbsolutePath + "/enwiki-longIpOnly.bz2"
+  val outCategoriesIps = dataset_folder.apply().getAbsolutePath + "/catIpsFinal"
 }
 

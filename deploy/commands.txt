@@ -4,3 +4,9 @@ mkdir .aws
 vim .aws/credentials
 
 aws s3 cp s3://wikigeoedits/IP2LOCATION-LITE-DB9.CSV.bz2 .
+
+
+
+spark/bin/spark-submit --master spark:// --driver-memory 25G --executor-memory 28G --executor-cores 8 --class "Main" --deploy-mode client wiki_geo_edits.jar -d /home/ec2-user -w game -k 15 -i 10 -m spark://:7077
+
+spark/bin/spark-submit --master spark:// --driver-memory 15G --executor-memory 20G --executor-cores 8 --class "Main" --deploy-mode client wiki_geo_edits.jar -d /home/ec2-user -w  -k 15 -e 0.01 -m spark://:7077

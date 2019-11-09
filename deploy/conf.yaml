@@ -49,8 +49,8 @@ providers:
     # user-data: /path/to/userdata/script
 
 launch:
-  num-slaves: 1
+  num-slaves: 4
   # install-hdfs: True
   # install-spark: True
 
-debug: True
+debug: False

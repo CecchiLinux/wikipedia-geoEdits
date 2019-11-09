@@ -7,12 +7,10 @@ import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.File
 
-import MyConf.Conf
-import Utility.{DataLoader, WorldMap}
+import Utility.{Conf, DataLoader, WorldMap}
 import Model._
 import My_KMeans._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 
 object Main extends App {
 
@@ -53,13 +51,13 @@ object Main extends App {
 
     val conf = new Conf(args)
     val mySparkConf = new SparkConf()
-    val masterURL = conf.masterURL.apply()
+    val masterURL = conf.master_url.apply()
     mySparkConf.setAppName("WikipediaEdits")
     mySparkConf.setMaster(masterURL)
     mySparkConf.set("spark-serializer", "org.apache.spark.serializer.KryoSerializer")
     mySparkConf.set("spark.kryoserializer.buffer.max", "2047")
     mySparkConf.registerKryoClasses(Array(classOf[Point]))
-    val mainFolderPath = conf.main_folder.apply().getAbsolutePath()
+    val mainFolderPath = conf.dataset_folder.apply().getAbsolutePath()
 
     val sc = SparkSession
       .builder()
@@ -93,28 +91,28 @@ object Main extends App {
       //}
       //// === full run
       val editsWithIpRDD = editsRDD.mapValues { case edit: Edit => (checker(edit.longIp, longIps.value), edit) }
-        // RDD[ String, (Long, Edit) ]
+        // RDD[String, (Long, Edit)]
         .values.flatMap(
-        // RDD[ Long, Edit ]
+        // RDD[Long, Edit]
         edit => {
           val categoriesString = edit._2.categories
           val categories = categoriesString.split(' ')
           val ipClass = edit._1
           categories.map(category => (category, ipClass))
         })
-        // RDD[ ( String, Long ) ]
+        // RDD[(String, Long)]
         .map(t => (t._1, List(t._2)))
         .reduceByKey(_ ::: _)
-        // RDD[(String, List[Long])] // (category, List of ips)
+      // RDD[(String, List[Long])] // (category, List of ips)
 
       editsWithIpRDD.map { case (category, ips) => s"${category}#${ips.mkString("|")}" }
-        .saveAsTextFile(conf.outCategoriesIps, classOf[BZip2Codec])
+        .coalesce(1, true).saveAsTextFile(conf.outCategoriesIps, classOf[BZip2Codec])
     }
 
 
     // ========================================================================
     // Phase 2 - Filter category by input words, perform the k-means, print sub categories in the map
-    // -w <words to include> -k <k> -e <e>
+    // -w <words to include> -n <words to exclude> -k <k> -e <e>
     //  where "k" is the number of the clusters and "e" is the epsilon to be used for the termination condition
     // =================================================================================================================
     val locationsMap: Broadcast[Map[Long, String]] =
@@ -125,14 +123,14 @@ object Main extends App {
     var outFolderName = mainFolderPath + "/filters-" + filterWords.mkString("_") // es. filters-italian_food
     if (excludedWords.length > 0) outFolderName += "-" + excludedWords.mkString("_")
 
-    if (conf.filter_categories.apply()) {
-      val editsRDD: RDD[String] = sc.textFile(conf.outCategoriesIps + "/part-00[0-5]*")
-      filterCategories(filterWords, excludedWords, editsRDD)
-        // RDD[(String, String)]
-        .map { case (category, ips) => s"${category}#${ips}" } // # is a free symbol for the dataset
-        .coalesce(1, true).saveAsTextFile(outFolderName)
-    }
 
+    val catIpsRDD = DataLoader.loadCatsWithIps(conf.outCategoriesIps + "/part-00[0-5]*", '|') // ip to coordinates
+    val filteredRDD = filterWords.length match {
+      case 0 => catIpsRDD
+      case _=> catIpsRDD
+        .filter(x => filterWords.forall(f => x._1.split("_").contains(f))) // filter categories that contain all the words
+        .filter(x => excludedWords.forall(f => !(x._1.split("_").contains(f))))
+    }
 
     // ========================================
     // Phase 2.1 - K-Means
@@ -143,7 +141,8 @@ object Main extends App {
     val epsilon = conf.epsilon.apply()
 
     // assigns points to categories
-    val catPtsRDD = DataLoader.loadPoints(outFolderName + "/part-00[0-5]*", '|') // ip to coordinates
+    //val catPtsRDD = DataLoader.loadPoints(outFolderName + "/part-00[0-5]*", '|') // ip to coordinates
+    val catPtsRDD = filteredRDD
       // RDD[(String, List[Long])]
       .mapValues(
         ips => {
@@ -261,60 +260,18 @@ object Main extends App {
     val imageFileBoundaries = Main.getClass.getClassLoader.getResourceAsStream(conf.foregroundBoundaries)
     val groupColors = for (group <- 0 until k) yield WorldMap.generateColor(group, k) // select a color for each cluster
     WorldMap.drawMapBackground(imageFile, graphics, conf.imageWidth, conf.imageHeight)
+    WorldMap.drawInfo(k, iterations, epsilon, filterWords.toArray, excludedWords.toArray, graphics, conf.imageWidth, conf.imageHeight, groupColors)
     WorldMap.drawIps(localGroups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
     WorldMap.drawMapBackground(imageFileBoundaries, graphics, conf.imageWidth, conf.imageHeight)
     WorldMap.drawCentroid(resultCentroids, graphics, conf.imageWidth, conf.imageHeight, groupColors)
-    WorldMap.drawIpsCounts(resultCentroids, localGroups, graphics, conf.imageWidth, conf.imageHeight, groupColors)
+    WorldMap.drawIpsCounts(resultCentroids, localGroups, conf.print_numbers.apply(), graphics, conf.imageWidth, conf.imageHeight, groupColors)
     WorldMap.writeTopCategories(mainCats.collect(), graphics, conf.imageWidth, conf.imageHeight, groupColors)
     // write image to disk
     ImageIO.write(image, conf.imageFormat, new File(outFolderName + "/map.png"))
   }
 
 
-  def filterCategories(filterWords: List[String], excludedWords: List[String], editsRDD: RDD[String]) = {
-    /**
-     * Select from the edits the categories that contain the filterWords
-     * Exclude the categories that contain the excludedWords
-     */
-    // val reg = ".*_world_war_ii_.*".r
-    editsRDD.map(line => line.split('#'))
-      // RDD[ Array[ String ]
-      .map(arr => {
-        val category = arr(0).toLowerCase()
-        val ips = arr(1)
-        (category, ips)
-      })
-      // RDD [String, String]
-      .filter(x => filterWords.forall(f => x._1.split("_").contains(f))) // filter categories that contain all the words
-      .filter(x => excludedWords.forall(f => !(x._1.split("_").contains(f))))
-
-  }
-
-  def associateIps(editsRDD: RDD[(String, Edit)], longIps: Broadcast[Array[Long]]) = {
-    //// === partial run
-    //val firstEdits = sc.parallelize(editsRDD.take(20))
-    //val editsWithIpClass = firstEdits.mapValues {
-    //  case edit: Edit => (checker(edit.longIp, longIps.value), edit)
-    //}
-    //// === full run
-    editsRDD.mapValues { case edit: Edit => (checker(edit.longIp, longIps.value), edit) }
-      // RDD[ String, (Long, Edit) ]
-      .values.flatMap(
-      // RDD[ Long, Edit ]
-      edit => {
-        val categoriesString = edit._2.categories
-        val categories = categoriesString.split(' ')
-        val ipClass = edit._1
-        categories.map(category => (category, ipClass))
-      })
-      // RDD[ ( String, Long ) ]
-      .map(t => (t._1, List(t._2)))
-      .reduceByKey(_ ::: _)
-
-  }
-
   // def groupCategories(inFileEditsPath: String, outFile: String, sc: SparkContext) = {
-
   //   //// ====================== cat - List[ips]
   //   val editsRDD = sc.textFile(inFileEditsPath + "/part-00[0-5]*")
   //   //val firstEdits = sc.parallelize(editsRDD.take(20))
