@@ -34,7 +34,7 @@ object Main extends App {
      * Thought for the interval research of the target.
      */
 
-    // tail-recursive binary search for name in names
+    // tail-recursive binary search
     def search(start: Int = 0, end: Int = ips.length - 1): T = {
       val mid = start + (end - start) / 2
       if (start > end) ips(start - 1)
@@ -90,7 +90,8 @@ object Main extends App {
       //  case edit: Edit => (checker(edit.longIp, longIps.value), edit)
       //}
       //// === full run
-      val editsWithIpRDD = editsRDD.mapValues { case edit: Edit => (checker(edit.longIp, longIps.value), edit) }
+      val editsWithIpRDD = editsRDD
+        .mapValues { case edit: Edit => (checker(edit.longIp, longIps.value), edit) }
         // RDD[String, (Long, Edit)]
         .values.flatMap(
         // RDD[Long, Edit]
@@ -211,8 +212,11 @@ object Main extends App {
       .reduceByKey(_ ::: _)
     // RDD[(Point, List[(String, Int)])]
 
-    val pts2CatsBroad: Broadcast[Map[Point, List[(String, Int)]]] =
-      sc.broadcast(catPtsCount.collect.toMap) // broadcast array through clusters
+    //val pts2CatsBroad: Broadcast[Map[Point, List[(String, Int)]]] =
+    //  sc.broadcast(catPtsCount.collect.toMap) // broadcast array through clusters
+
+    val pts2Cats: Map[Point, List[(String, Int)]] =
+      catPtsCount.collect.toMap
 
     val groupsCats = groups
       // RDD[(Int, List[Point])]
@@ -220,7 +224,7 @@ object Main extends App {
       .mapValues(
         pts => {
           pts.flatMap(pt => {
-            pts2CatsBroad.value(pt)
+            pts2Cats(pt)
           })
         }
       )

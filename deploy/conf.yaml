@@ -49,7 +49,7 @@ providers:
     # user-data: /path/to/userdata/script
 
 launch:
-  num-slaves: 4
+  num-slaves: 5
   # install-hdfs: True
   # install-spark: True
 

@@ -72,12 +72,8 @@ class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iteratio
   }
 
   def kmeans(centroids: Array[Point], it: Int, stopF: (Array[Point], Array[Point], Int) => Boolean): Array[Point] = {
-    /**
-     *
-     */
 
-    // Assign points into clusters based on their closest centroids,
-    // and take the average of all points in each cluster
+    // associate each point with his closest centroids, than for each cluster calculate the average
     val clusters =
       (
         this.points
@@ -94,14 +90,15 @@ class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iteratio
           // Map[Point, Point]
       )
 
-    // Recalculate centroids based on their clusters
-    // (or leave them alone if they don't have any points in their cluster)
-    val newCentroids = centroids.map(oldCentroid => {
-      clusters.get(oldCentroid) match {
-        case Some(newCentroid) => newCentroid
-        case None => oldCentroid
-      }
-    })
+    // Recalculate centroids
+    val newCentroids = centroids
+      .map(oldCentroid => {
+        clusters.get(oldCentroid) match {
+          case Some(newCentroid) => newCentroid
+          case None => oldCentroid
+        }
+      })
+    // Array[Point]
 
     if (stopF(centroids, newCentroids, it)) kmeans(newCentroids, it+1, stopF)
     else newCentroids
