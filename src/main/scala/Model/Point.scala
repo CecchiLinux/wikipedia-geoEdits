@@ -21,6 +21,7 @@ class Point(val x: Double, val y: Double) extends Serializable {
 }
 
 object Point {
+
   def random() = {
     import java.text.DecimalFormat
     val minLat = -90.00
@@ -34,4 +35,5 @@ object Point {
       latitude
     )
   }
+
 }

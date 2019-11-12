@@ -54,6 +54,11 @@ class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iteratio
     def printInfo(movement: Array[Double], it: Int) = {
       System.err.println("Iteration: " + it + "\t" + "Centroids changed by\t" + movement.map(d => "%3f".format(d)).mkString("(", ", ", ")"))
     }
+
+    //def fixedCentroidsEurope(k: Int) = {
+    //  //val Europe: Array[Point] = [Point(1, 2)]
+    //  val Europe: Array[(String, String)] = Array(("a","b"), ("c","d"))
+    //}
   }
 
   def clusterize(clusterNumbers: Int, startCentroids: Array[Point],

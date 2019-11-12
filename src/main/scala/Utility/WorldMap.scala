@@ -64,7 +64,8 @@ object WorldMap {
   def drawIpsCounts(resultCentroids: Seq[Point], ips: Seq[(Int, List[Point])], numbers: Boolean, graphics: Graphics2D, imageWidth: Int, imageHeight: Int, groupColors: IndexedSeq[Color]) {
     graphics.setColor(Color.WHITE)
     val numberFormat = NumberFormat.getNumberInstance(Locale.US)
-    val font = new Font(Font.SANS_SERIF, Font.BOLD, 18)
+    val fontSize = if (resultCentroids.length > 30) 10 else 18
+    val font = new Font(Font.SANS_SERIF, Font.BOLD, fontSize)
     graphics.setFont(font)
     for ((group, coordinates) <- ips) {
       val ipsCount = if (numbers) "(" + group.toString() + ") " + numberFormat.format(coordinates.size) else "(" + group.toString() + ")"
@@ -72,9 +73,9 @@ object WorldMap {
       val (x, y) = toImageCoordinates(resultCentroids(group).x, resultCentroids(group).y, imageWidth, imageHeight)
       // draw text shadow
       graphics.setColor(Color.BLACK)
-      graphics.drawString(ipsCount, (x - bound.getWidth / 2).toInt + 1, (y + bound.getHeight + 10).toInt + 1)
+      graphics.drawString(ipsCount, (x - bound.getWidth / 2).toInt + 1, (y + bound.getHeight + 8).toInt + 1)
       graphics.setColor(Color.WHITE)
-      graphics.drawString(ipsCount, (x - bound.getWidth / 2).toInt, (y + bound.getHeight + 10).toInt)
+      graphics.drawString(ipsCount, (x - bound.getWidth / 2).toInt, (y + bound.getHeight + 8).toInt)
     }
   }
 
@@ -86,6 +87,28 @@ object WorldMap {
     for ((group, cat) <- topCats) {
       val color = groupColors(group)
       val string = "(" + group.toString + ") " + cat._1.replace("_", " ") + " " + cat._2.toString
+      val currentHeight = if (topCats.length <= 15) imageHeight / 2 + offset * i else imageHeight / 3 + offset * i
+      graphics.setColor(color)
+      graphics.fillRect(10, currentHeight, 20, 20)
+      graphics.setColor(Color.WHITE)
+      graphics.drawRect(10, currentHeight, 20, 20)
+      graphics.setColor(Color.BLACK)
+      graphics.drawString(string, 38 + 1, currentHeight + 18 + 1)
+      graphics.setColor(Color.WHITE)
+      graphics.drawString(string, 38, currentHeight + 18)
+      i = i + 1
+    }
+  }
+
+  def writeSuperCategories(topCats: Seq[(String, List[Int])], graphics: Graphics2D, imageWidth: Int, imageHeight: Int, colors: IndexedSeq[Color]) {
+    val offset = 30
+    var i = 0
+    graphics.setFont(new Font("Arial Black", Font.BOLD, 20))
+
+    for ((cat, _) <- topCats) {
+      val color = colors(i)
+      //val string = "(" + group.toString + ") " + cat._1.replace("_", " ") + " " + cat._2.toString
+      val string = cat.replace("_", " ")
       val currentHeight = if (topCats.length <= 15) imageHeight / 2 + offset*i else imageHeight / 3 + offset*i
       graphics.setColor(color)
       graphics.fillRect(10, currentHeight, 20, 20)
@@ -104,7 +127,7 @@ object WorldMap {
     graphics.setFont(new Font("Arial Black", Font.BOLD, 20))
     graphics.setColor(Color.BLACK)
     graphics.drawString("Filter words: " + words.mkString(" "), imageWidth / 2, imageHeight.toInt - 60)
-    graphics.drawString("k: %d,  \tit: %d,  \teps: %.4f".format(k, iterations, epsilon), imageWidth / 2, imageHeight.toInt - 40)
+    graphics.drawString("k: %d,  \tit: %d,  \teps: %.5f".format(k, iterations, epsilon), imageWidth / 2, imageHeight.toInt - 40)
   }
 
 

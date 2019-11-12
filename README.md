@@ -11,7 +11,7 @@ It is possible to filter categories and sub-categories and than visualize the re
 
 
 
-![map](./imgs/map-europe.png)
+![map](./imgs/map-programming-75-grouped.png)
 
 
 
@@ -50,11 +50,17 @@ options:
 
 
 
+## Acknowledgments
+
+Thanks to [Chimpler](https://github.com/chimpler/tweet-heatmap) for the map print.
+
+
+
 
 
 # Scalable And Cloud Programming exam
 
-WikiGeoEdits is realized for the course of Scalable And Cloud Programming.
+WikiGeoEdits project is realized for the course of Scalable And Cloud Programming.
 
 
 
@@ -63,8 +69,9 @@ WikiGeoEdits is realized for the course of Scalable And Cloud Programming.
 The software consists of several parts:
 
 - **Phase 1**: IP addresses resolution [complete parallelism]
-- **Phase 2**: filtering categories and clustering coordinates [parallelism with synchronizations]
-- **Phase 3**: map print [no parallelism]
+- **Phase 2**: filtering categories and clustering coordinates [parallelism with local reduce]
+- **Phase 3**: date analysis [parallelism with local reduce]
+- **Phase 4**: map print [no parallelism]
 
 
 
@@ -87,13 +94,12 @@ ip_from,ip_to,latitude,longitude
 ...
 ```
 
-
-
 Converting an IP into *Long* we get a value between one of the *ip_form* and *ip_to* pairs. The pairs are ordered and consecutive than we can consider only the ip_from values placing them into an array and use a custom version of the dichotomic search that return the lower bound of the target IP's class instead of a boolean value (the target IP may not be present but still has a class).
 
 ```scala
   def checker[T](target: T, ips: Array[T])(implicit ev: T => Ordered[T]): T = {
-    // specify that the method applies to all types for which an ordering exists
+    // contentx bound specify that the method applies to all types for which an 
+    // ordering exists (permits the "greater than")
     /**
      * Dichotomic search: search for the target element through the array.
      * Return the target element if present or the nearest smaller element on the left.
@@ -120,6 +126,8 @@ SW use broadcast variables to make this phase completely parallel between the cl
 From [the official documentation about Broadcast Variables](http://spark.apache.org/docs/latest/programming-guide.html#broadcast-variables):
 
 > Broadcast variables allow the programmer to keep a read-only variable cached on each machine rather than shipping a copy of it with tasks.
+
+
 
  ```scala
 /* val locationsRDD: RDD[(Long, String)] */
@@ -161,29 +169,54 @@ Italian_designers#1372606976
 
 
 
-#### Phase 2 - filtering categories and clustering coordinates [parallelism with synchronizations]
+#### Phase 2 - filtering categories and clustering coordinates [parallelism with local reduce]
 
 To filter categories we can list the words that have to be in the string category and the words to exclude.
 
 ```bash
-usage: ./run.sh [--dataset_folder <folder path>] [--words <required words>...] [--no_words <excluded words>...]
+usage: ./run.sh [--dataset_folder <folder path>] [--words <required words>...] 
+				[--no_words <excluded words>...]
 ```
 
-To clusterize the filtered categories coordinates I use the K-Means algorithm. The geographic coordinates do not need to be modified to be used as points in the algorithm.
+
+
+To group the filtered categories coordinates I use the K-Means algorithm. The geographic coordinates do not need to be modified to be used as points in the algorithm.
+
+```scala
+class Point(val x: Double, val y: Double) extends Serializable {
+  def + (that: Point) = new Point(this.x + that.x, this.y + that.y)
+  def - (that: Point) = this + (-that)
+  def unary_- () = new Point(-this.x, -this.y)
+  def / (d: Double) = new Point(this.x / d, this.y / d)
+  def magnitude = math.sqrt(x * x + y * y)
+  def distance(that: Point) = (that - this).magnitude // Euclidean distance
+  override def equals(that: Any): Boolean = {
+    that match { case that : Point => this.x == that.x && this.y == that.y
+      			 case _ => false }
+  }
+  override def hashCode(): Int = (this.x, this.y).hashCode()
+  override def toString = "(" + x.toString + "," + y.toString + ")"
+}
+```
+
+
 
 My implementation of the K-Means algorithm:
 
 ```scala
-class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iterations: Int) extends Serializable {
+class My_KMeans(masterURL: String, points: RDD[Point], 
+                epsilon: Double, iterations: Int) extends Serializable {
 	
-    points.persist(StorageLevel.MEMORY_AND_DISK)
+    points.persist(StorageLevel.MEMORY_AND_DISK)// persiste points on nodes (whole exec)
     
     /** Finds the closest centroid to the given point. */
     def closestCentroid(centroids: Array[Point], point: Point) = {
-        centroids.reduceLeft((a, b) => if ((point distance a) < (point distance b)) a else b)
+        centroids
+        	.reduceLeft((a, b) => if ((point distance a) < (point distance b)) a else b)
 
 
-    def kmeans(centroids: Array[Point], it: Int, stopF: (Array[Point], Array[Point], Int) => Boolean): Array[Point] = {
+    def kmeans(centroids: Array[Point], it: Int, 
+               stopF: (Array[Point], Array[Point], Int) => Boolean): Array[Point] = {
 
         // associate each point with his closest centroids, than for each cluster 				// calculate the average
         val clusters = (
@@ -194,11 +227,11 @@ class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iteratio
               .reduceByKeyLocally({
                 case ((ptA, numA), (ptB, numB)) => (ptA + ptB, numA + numB)
               })
-              // Map[Point, (Point, Int)]
+              // Map[Point, (Point, Int)] // reduce locally at each iteration
               .map({
                 case (centroid, (ptSum, numPts)) => centroid -> ptSum / numPts
               })
-              // Map[Point, Point]
+            // Map[Point, Point]
           )
 
         // recalculate centroids
@@ -210,7 +243,7 @@ class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iteratio
                     case None => oldCentroid
               }
         	})
-        	// Array[Point]
+        // Array[Point]
 
         if (stopF(centroids, newCentroids, it)) kmeans(newCentroids, it+1, stopF)
         else newCentroids
@@ -223,11 +256,97 @@ class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iteratio
 
 
 
+#### Phase 3 - date analysis [parallelism with local reduce]
+
+The objectives of this phase are:
+
+- count categories occurrences in clusters
+
+- obtain the most popular category for each cluster
+- group clusters by the most popular category
+
+
+
+```scala
+...
+// count categories occurrences in clusters
+val groupsCategories = groups
+    // RDD[(Int, List[Point])]
+    .mapValues(pts => pts distinct) // remove the duplicates
+    .mapValues(pts => {
+            pts.flatMap(pt => {
+                pts2Cats(pt)
+            })
+        })
+    // RDD[(Int, List[(String, Int)])]
+    .map { case (group, cats) =>
+        (group, cats.groupBy(_._1).mapValues(_.map(_._2).sum).toList)
+    }
+// RDD[(Int, List[(String, Int)])]
+
+// obtain the most popular category for each cluster
+val mainCategories =
+      groupsCategories.mapValues(
+        cats => cats.reduce((x, y) => if (x._2 >= y._2) x else y)
+      )
+// RDD[(Int, (String, Int))]
+
+
+// group clusters by the most popular category
+val superCluster = mainCategories
+    .map {
+        case (cluster, (cat, _)) =>
+        (cat, cluster)
+    }
+    .map(t => (t._1, List(t._2)))
+    .reduceByKey(_ ::: _)
+    // RDD[String, List[Int]]
+    .collect()
+...
+```
+
+```scala
+def distinct[A](list: Iterable[A]): List[A] = {
+    list.foldLeft(List[A]()) {
+      case (acc, item) if acc.contains(item) => acc
+      case (acc, item) => item :: acc
+    }
+  }
+```
 
 
 
 
 
+#### Phase 4 - map print [no parallelism]
+
+The objectives of this phase are:
+
+- print a map where to visualize all the obtained clusters (a color of each cluster)
+- print a map where to visualize the categories (a color for each super cluster)
+
+
+
+
+
+### Deploy
+
+I used AWS service to run my program, Amazon S3 bucket as datasets folder (I used it also for the .jar transfer because it's extremely faster than copy from local). To start and manage nodes I used the command line tool [flintrock](https://github.com/nchammas/flintrock).  In the [deploy folder](https://github.com/CecchiLinux/wikipedia-geoEdits/tree/master/deploy) the command used to:
+
+- install Java and Spark on each node
+- transfer the aws credential on each node
+  - place credential on *~/aws/.credentials*
+- transfer the datasets on each node
+
+```bash
+./deploy.sh
+```
+
+SSH the master node (the conf.yaml file selects 5 slaves) and run a command:
+
+```bash
+spark/bin/spark-submit --master spark://[private_ip] --conf spark.driver.maxResultSize=3g  --driver-memory 5G --executor-memory 15G --class "Main" --deploy-mode client wiki_geo_edits.jar -d /home/ec2-user -w italian -k 15 -i 10 -m spark://[private_ip]:7077
+```
 
 
 

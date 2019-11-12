@@ -3,7 +3,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.hadoop.io.compress.BZip2Codec
 import org.apache.spark.broadcast.Broadcast
 import javax.imageio.ImageIO
-import java.awt.RenderingHints
+import java.awt.{Color, RenderingHints}
 import java.awt.image.BufferedImage
 import java.io.File
 
@@ -58,6 +58,10 @@ object Main extends App {
     mySparkConf.set("spark.kryoserializer.buffer.max", "2047")
     mySparkConf.registerKryoClasses(Array(classOf[Point]))
     val mainFolderPath = conf.dataset_folder.apply().getAbsolutePath()
+
+    val k = conf.k.apply()
+    val iterations = conf.iterations.apply()
+    val epsilon = conf.epsilon.apply()
 
     val sc = SparkSession
       .builder()
@@ -123,7 +127,7 @@ object Main extends App {
     val excludedWords = conf.no_words.apply()
     var outFolderName = mainFolderPath + "/filters-" + filterWords.mkString("_") // es. filters-italian_food
     if (excludedWords.length > 0) outFolderName += "-" + excludedWords.mkString("_")
-
+    outFolderName += "-" + k + "-" + iterations + "-" + epsilon
 
     val catIpsRDD = DataLoader.loadCatsWithIps(conf.outCategoriesIps + "/part-00[0-5]*", '|') // ip to coordinates
     val filteredRDD = filterWords.length match {
@@ -137,10 +141,6 @@ object Main extends App {
     // Phase 2.1 - K-Means
     //
     // =================================================================================================================
-    val k = conf.k.apply()
-    val iterations = conf.iterations.apply()
-    val epsilon = conf.epsilon.apply()
-
     // assigns points to categories
     //val catPtsRDD = DataLoader.loadPoints(outFolderName + "/part-00[0-5]*", '|') // ip to coordinates
     val catPtsRDD = filteredRDD
@@ -220,7 +220,7 @@ object Main extends App {
 
     val groupsCats = groups
       // RDD[(Int, List[Point])]
-      .mapValues(pts => pts distinct) // remove the duplicates (they are already considered on the pts2CatsBroad)
+      .mapValues(pts => pts distinct) // remove the duplicates (they are already considered on the pts2Cats)
       .mapValues(
         pts => {
           pts.flatMap(pt => {
@@ -234,34 +234,55 @@ object Main extends App {
       }
     // RDD[(Int, List[(String, Int)])]
 
+    // Write to disk the clusters with their categories
+    groupsCats.map {
+      case (cluster, cats) =>
+        val latitude = resultCentroids(cluster).y
+        val longitude = resultCentroids(cluster).x
+        s"${cluster},${latitude},${longitude}:\n\t${cats.mkString("\n\t")}"
+    }.coalesce(1, true).saveAsTextFile(outFolderName + "/clustersCats.csv")
+
+
+    // select the category with the highest number of contributions
     val mainCats =
       groupsCats.mapValues(
         cats => cats.reduce((x, y) => if (x._2 >= y._2) x else y)
       )
     // RDD[(Int, (String, Int))]
-    mainCats.foreach(println)
 
+    // Write to disk the clusters with their main categories
     mainCats.map {
       case (cluster, (cat, number)) => {
         val latitude = resultCentroids(cluster).y
         val longitude = resultCentroids(cluster).x
-        s"${latitude},${longitude},${cat},${number}"
+        s"${cluster},${latitude},${longitude},${cat},${number}"
       }
     }.coalesce(1, true).saveAsTextFile(outFolderName + "/mainCats.csv")
+
+    // group clusters by categories
+    val superCluster = mainCats
+      .map {
+        case (cluster, (cat, _)) =>
+          (cat, cluster)
+      }
+      .map(t => (t._1, List(t._2)))
+      .reduceByKey(_ ::: _)
+      // RDD[String, List[Int]]
+      .collect()
 
 
     // ========================================
     // Phase 3 - Print the map
     //
     // =================================================================================================================
-    val image = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
-    val graphics = image.createGraphics
-    graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-
     // draw map
     val localGroups = groups.collect()
+    val image = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
+    val graphics = image.createGraphics
     val imageFile = Main.getClass.getClassLoader.getResourceAsStream(conf.backgroundImageFileName)
     val imageFileBoundaries = Main.getClass.getClassLoader.getResourceAsStream(conf.foregroundBoundaries)
+    graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
     val groupColors = for (group <- 0 until k) yield WorldMap.generateColor(group, k) // select a color for each cluster
     WorldMap.drawMapBackground(imageFile, graphics, conf.imageWidth, conf.imageHeight)
     WorldMap.drawInfo(k, iterations, epsilon, filterWords.toArray, excludedWords.toArray, graphics, conf.imageWidth, conf.imageHeight, groupColors)
@@ -269,9 +290,35 @@ object Main extends App {
     WorldMap.drawMapBackground(imageFileBoundaries, graphics, conf.imageWidth, conf.imageHeight)
     WorldMap.drawCentroid(resultCentroids, graphics, conf.imageWidth, conf.imageHeight, groupColors)
     WorldMap.drawIpsCounts(resultCentroids, localGroups, conf.print_numbers.apply(), graphics, conf.imageWidth, conf.imageHeight, groupColors)
-    WorldMap.writeTopCategories(mainCats.collect(), graphics, conf.imageWidth, conf.imageHeight, groupColors)
+    //WorldMap.writeTopCategories(mainCats.collect(), graphics, conf.imageWidth, conf.imageHeight, groupColors)
     // write image to disk
-    ImageIO.write(image, conf.imageFormat, new File(outFolderName + "/map.png"))
+    ImageIO.write(image, conf.imageFormat, new File(outFolderName + "/map-" + filterWords.mkString("_") + "-" + k + ".png"))
+
+
+    val image2 = new BufferedImage(conf.imageWidth, conf.imageHeight, BufferedImage.TYPE_INT_ARGB)
+    val graphics2 = image2.createGraphics
+    val imageFile2 = Main.getClass.getClassLoader.getResourceAsStream(conf.backgroundImageFileName)
+    val imageFileBoundaries2 = Main.getClass.getClassLoader.getResourceAsStream(conf.foregroundBoundaries)
+    graphics2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+    val colors = for (group <- 0 until superCluster.length) yield WorldMap.generateColor(group, superCluster.length) // select a color for each cluster
+    val superGroupColors = new Array[Color](k)
+    var i = 0
+    for ((_, groups) <- superCluster) {
+      for (group <- groups) {
+        superGroupColors(group) = colors(i)
+      }
+      i += 1
+    }
+    WorldMap.drawMapBackground(imageFile2, graphics2, conf.imageWidth, conf.imageHeight)
+    WorldMap.drawInfo(k, iterations, epsilon, filterWords.toArray, excludedWords.toArray, graphics2, conf.imageWidth, conf.imageHeight, superGroupColors)
+    WorldMap.drawIps(localGroups, graphics2, conf.imageWidth, conf.imageHeight, superGroupColors)
+    WorldMap.drawMapBackground(imageFileBoundaries2, graphics2, conf.imageWidth, conf.imageHeight)
+    WorldMap.drawCentroid(resultCentroids, graphics2, conf.imageWidth, conf.imageHeight, superGroupColors)
+    //WorldMap.drawIpsCounts(resultCentroids, localGroups, conf.print_numbers.apply(), graphics2, conf.imageWidth, conf.imageHeight, superGroupColors)
+    WorldMap.writeSuperCategories(superCluster, graphics2, conf.imageWidth, conf.imageHeight, colors)
+    // write image to disk
+    ImageIO.write(image2, conf.imageFormat, new File(outFolderName + "/map-" + filterWords.mkString("_") + "-" + k + "-grouped.png"))
   }
 
 
