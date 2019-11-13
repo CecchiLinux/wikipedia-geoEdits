@@ -91,3 +91,7 @@ project/plugins/project/
 ### Scala ###
 *.class
 *.log
+
+### Personals ###
+./deploy/commands.txt
+./deploy/spark_cluster.pem
