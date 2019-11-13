@@ -93,5 +93,4 @@ project/plugins/project/
 *.log
 
 ### Personals ###
-./deploy/commands.txt
-./deploy/spark_cluster.pem
+deploy/.spark_cluster.pem

@@ -4,4 +4,5 @@ sbt --error assembly &&
   --deploy-mode client \
   --class "Main" \
   --master local[*] \
+  --conf spark.driver.maxResultSize=3g \
   target/scala-2.11/Wikipedia-geoEdits-assembly-0.1.jar "$@"

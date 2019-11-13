@@ -22,7 +22,7 @@ provider: ec2
 providers:
   ec2:
     key-name: spark_cluster
-    identity-file: ./spark_cluster.pem
+    identity-file: ./.spark_cluster.pem
     instance-type: t2.2xlarge
     region: us-east-1
     # availability-zone: <name>

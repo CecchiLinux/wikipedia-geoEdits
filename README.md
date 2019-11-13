@@ -15,7 +15,17 @@ It is possible to filter categories and sub-categories and than visualize the re
 
 
 
-## Getting Started
+### Dependencies
+
+- Java : 1.8.
+- Scala : 2.11.12
+- Spark : 2.3.4
+
+- sbt : 1.1.6
+
+  
+
+### Getting Started
 
 - download the [Wikipedia edit history](https://snap.stanford.edu/data/wiki-meta.html) 
 - download the [ip2Location LITE database](https://lite.ip2location.com/database/ip-country-region-city-latitude-longitude-zipcode)
@@ -24,6 +34,10 @@ It is possible to filter categories and sub-categories and than visualize the re
 ```bash
 bzcat /your_path/enwiki-20080103.main.bz2 | python3 ./python/enwiki2csv.py | python3 ./python/ip2integer.py | bzip2 > /your_path/enwiki-longIpOnly.bz2
 ```
+
+Output:
+
+![](./imgs/res1.png)
 
 
 
@@ -50,9 +64,41 @@ options:
 
 
 
+### Deploy on Amazon AWS
+
+I used AWS Educate services including Amazon S3 buckets to store datasets (also for the .jar transfer because it's extremely faster than copy from local). Students can retrieve credentials in the Vocareum page (Account Details), before opening the AWS console. Create the file *~/aws/.credentials* and copy the credentials on it. The session will be interrupted after 2:30, but the running machine will continue to go and consume credits. Re-login to Vocareum to start a new session. Create a new *pair key* from the AWS Console and place the .pem file on the deploy folder.
+
+To start and manage nodes I used the command line tool [flintrock](https://github.com/nchammas/flintrock).  In the [deploy folder](https://github.com/CecchiLinux/wikipedia-geoEdits/tree/master/deploy) there is the *deploy.sh* command used to:
+
+- install Java and Spark on each node
+- transfer the aws credential on each node
+- transfer the datasets on each node
+
+Create the *conf.yaml* usign the Flintrock command line. You have to specify the region (us-east-1 is the only available for students), the identity-file (.pem path), the OS (ami) and the number of slaves.
+
+Flintrock may fail with this message: 
+
+```bash
+SSH protocol error. Possible causes include using the wrong key file or username.
+Do you want to terminate the 6 instances created by this operation? [Y/n]: Y
+Terminating instances...
+```
+
+Type "Y" and re-try, it usually works.
+
+SSH the master node (AWS console, go to "running instances", right-click on the master node, "connect") and run a command like this:
+
+```bash
+spark/bin/spark-submit --master spark://[private_ip] --conf spark.driver.maxResultSize=3g  --driver-memory 10G --executor-memory 15G --class "Main" --deploy-mode client wiki_geo_edits.jar -d /home/ec2-user -w italian -k 15 -i 10 -m spark://[private_ip]:7077
+```
+
+You can retrieve the private IP of the master node in the master node info (AWS console, go to "running instances", click on the master node). You can view the Spark UI console going to http://master-node-public-ip:4040.
+
+
+
 ## Acknowledgments
 
-Thanks to [Chimpler](https://github.com/chimpler/tweet-heatmap) for the map print.
+Thanks to [Chimpler](https://github.com/chimpler/tweet-heatmap) for the print of coordinates on the map.
 
 
 
@@ -77,22 +123,13 @@ The software consists of several parts:
 
 #### Phase 1 - IP addresses resolution [complete parallelism]
 
-The goal is to get the association of edits with the location (coordinates) once and for all. The "Parsed Wikipedia edit history" consists in 116.590.856 contributions (8GB text file). Each anonymous contribution has an IP address. The software convert them into integers and look for the nearest location in the IP2LOCATION database. 
+The goal is to get the association of edits with the location (coordinates) once and for all. The "Parsed Wikipedia edit history" consists in 116.590.856 contributions (8GB text file). Each anonymous contribution has an IP address (33.875.047 contributions). The software convert them into integers and look for the nearest location in the IP2LOCATION database.  
 
 To boost the IP resolution the SW exploits the database structure.
 
-```csv
-ip_from,ip_to,latitude,longitude
-"0",16777215","0.000000","0.000000"
-"16777216","16777471","34.052230","-118.243680"
-"16777472","16778239","26.061390","119.306110"
-"16778240","16779263","-37.814000","144.963320"
-"16779264","16781311","23.116670","113.250000"
-"16781312","16785407","35.689506","139.691700"
-"16785408","16793599","23.116670","113.250000"
-"16793600","16797695","34.385280","132.455280"
-...
-```
+<img src="./imgs/resLoc.png" />
+
+
 
 Converting an IP into *Long* we get a value between one of the *ip_form* and *ip_to* pairs. The pairs are ordered and consecutive than we can consider only the ip_from values placing them into an array and use a custom version of the dichotomic search that return the lower bound of the target IP's class instead of a boolean value (the target IP may not be present but still has a class).
 
@@ -157,15 +194,7 @@ val editsWithIpRDD = editsRDD
 
 The phase 1 ends with something like this (categoty#list of Long IPs):
 
-```bash
-Italian_librettists#1363761152||3664136448|3664136448|1383812096
-Italian_computer_scientists#3353255936|3353255936|344651264|344651264|...
-Italian_film_directors#2478590464|2478590464|2478590464|2478590464|2478590464
-Italian-American#1460734720|79237376|1165786624|1207369728|1177731072|1145931776|...
-Italian_football_clubs#1354197760|3259936256|3279468032|1354094080|2306366464|...
-Italian_designers#1372606976
-...
-```
+![](./imgs/res2.png)
 
 
 
@@ -329,28 +358,21 @@ The objectives of this phase are:
 
 
 
-### Deploy
+### Local VS Cloud
 
-I used AWS service to run my program, Amazon S3 bucket as datasets folder (I used it also for the .jar transfer because it's extremely faster than copy from local). To start and manage nodes I used the command line tool [flintrock](https://github.com/nchammas/flintrock).  In the [deploy folder](https://github.com/CecchiLinux/wikipedia-geoEdits/tree/master/deploy) the command used to:
+As I expected in the phase it's easy to appreciate the performance improvement. Including the transfer time of broadcast variables, the run of the IPs resolution using 5 slaves took 20min with respect to 5h of master-only use.
 
-- install Java and Spark on each node
-- transfer the aws credential on each node
-  - place credential on *~/aws/.credentials*
-- transfer the datasets on each node
+To effectively appreciate the performance improvement on the KMeans execution it is necessary to select categories with a particularly high edit number (films, war, ...), or do not select categories at all otherwise each iteration takes about 10s to run and, thanks to the memorized points on nodes, only the new centroids needs to be propagated.
 
-```bash
-./deploy.sh
-```
+![KMeans iterations](./imgs/executionP2.png)
 
-SSH the master node (the conf.yaml file selects 5 slaves) and run a command:
-
-```bash
-spark/bin/spark-submit --master spark://[private_ip] --conf spark.driver.maxResultSize=3g  --driver-memory 5G --executor-memory 15G --class "Main" --deploy-mode client wiki_geo_edits.jar -d /home/ec2-user -w italian -k 15 -i 10 -m spark://[private_ip]:7077
-```
+Fig. KMeans iterations
 
 
 
+![](./imgs/execution.png)
 
+Fig. Spark UI executors visualization
 
 
 
