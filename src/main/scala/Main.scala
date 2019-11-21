@@ -11,6 +11,7 @@ import Utility.{Conf, DataLoader, WorldMap}
 import Model._
 import My_KMeans._
 import org.apache.spark.rdd.RDD
+import Ordering.Implicits._
 
 object Main extends App {
 
@@ -26,8 +27,8 @@ object Main extends App {
   //  }.mkString(separator)
   //}
 
-  def checker[T](target: T, ips: Array[T])(implicit ev: T => Ordered[T]): T = {
-    // specify that the method applies to all types for which an ordering exists
+  def checker[T: Numeric](target: T, ips: Array[T]): T = { // Numeric <: Ordering (Ordering is an upper bound)
+    //def checker[T](target: T, ips: Array[T])(implicit ev: T => Ordered[T]): T = { // specify that the method applies to all types for which an ordering exists
     /**
      * Dichotomic search: search for the target element through the array.
      * Return the target element if present or the nearest smaller element on the left.
@@ -133,7 +134,7 @@ object Main extends App {
     val filteredRDD = filterWords.length match {
       case 0 => catIpsRDD
       case _=> catIpsRDD
-        .filter(x => filterWords.forall(f => x._1.split("_").contains(f))) // filter categories that contain all the words
+        .filter(x => filterWords.exists(f => x._1.split("_").contains(f))) // filter categories that contain all the words
         .filter(x => excludedWords.forall(f => !(x._1.split("_").contains(f))))
     }
 

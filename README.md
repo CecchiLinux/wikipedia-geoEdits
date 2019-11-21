@@ -1,8 +1,8 @@
 # Wikipedia-geoEdits
 
-This is tool designed for the study of the distribution of anonymous changes made to Wikipedia pages.
+The main goal of the project is to study the distribution of interests in regions of the globe. This is tool analyzes the distribution of anonymous changes made to Wikipedia pages and uses the popularity of the categories as a measure of interest for a given subject.
 
-The software combines the [Wikipedia edit history](https://snap.stanford.edu/data/wiki-meta.html) (Wikipedia ENG: 116.590.856 contributions) with the [ip2Location LITE database](https://lite.ip2location.com/database/ip-country-region-city-latitude-longitude-zipcode) associating each anonymous contribution with the corresponding geographic coordinates. This is possible because anonymous editors are listed by their ip address, e.g. ip:69.17.21.242.
+The software combines the [Wikipedia edit history](https://snap.stanford.edu/data/wiki-meta.html) (Wikipedia ENG: 116.590.856 contributions) with the [ip2Location LITE database](https://lite.ip2location.com/database/ip-country-region-city-latitude-longitude-zipcode) associating each anonymous contribution with the corresponding geographic coordinates. This is possible thanks to the anonymous editors identification that correspond to their ip address, e.g. ip:69.17.21.242.
 The IP2Location LITE database provide 2.920.499 distinct location all over the world for the IP resolution.
 
 In this study I decided to consider only the geographic coordinates and then use a clustering algorithm to perform the grouping of areas based on the concentration of the points. The distribution of the categories of interest in the different areas of the world is thus studied.
@@ -34,6 +34,19 @@ It is possible to filter categories and sub-categories and than visualize the re
 ```bash
 bzcat /your_path/enwiki-20080103.main.bz2 | python3 ./python/enwiki2csv.py | python3 ./python/ip2integer.py | bzip2 > /your_path/enwiki-longIpOnly.bz2
 ```
+
+Input:
+
+|          | description                                        |
+| -------- | -------------------------------------------------- |
+| REVISION | ip, article_id, rev_id, article_title              |
+| CATEGORY | list of categories                                 |
+| MAIN     | cross-references to pages in other namespaces      |
+| EXTERNAL | hyperlinks to pages outside Wikipedia              |
+| MINOR    | whether the edit was marked as minor by the author |
+| TEXTDATA | word count of revision's plain text                |
+
+
 
 Output:
 
@@ -106,7 +119,7 @@ Thanks to [Chimpler](https://github.com/chimpler/tweet-heatmap) for the print of
 
 # Scalable And Cloud Programming exam
 
-WikiGeoEdits project is realized for the course of Scalable And Cloud Programming.
+WikiGeoEdits is realized for the course of Scalable And Cloud Programming. The aim of the course is experiment a novel programming style that makes it easier to scale your small problem to the large by leveraging on Scala and Spark.
 
 
 
@@ -115,15 +128,31 @@ WikiGeoEdits project is realized for the course of Scalable And Cloud Programmin
 The software consists of several parts:
 
 - **Phase 1**: IP addresses resolution [complete parallelism]
-- **Phase 2**: filtering categories and clustering coordinates [parallelism with local reduce]
-- **Phase 3**: date analysis [parallelism with local reduce]
+
+  - create the main input RDD from external data
+  - transform it to define new RDD with geographic coordinates
+  - flatMap() and reduceByKey() to focus the study on categories
+  - persist() the intermediate RDD that will need to be reused.
+
+- **Phase 2**: define regions [parallelism with shuffling]
+
+  - define new RDD using filter() for the selected categories.
+  - apply the KMeans algorithm on the whole set of coordinates to define regions
+
+- **Phase 3**: data distribution analysis [parallelism with shuffling]
+
+  - define new RDD count occurrences of categories on each region
+  - 
+
 - **Phase 4**: map print [no parallelism]
 
-
+  
 
 #### Phase 1 - IP addresses resolution [complete parallelism]
 
-The goal is to get the association of edits with the location (coordinates) once and for all. The "Parsed Wikipedia edit history" consists in 116.590.856 contributions (8GB text file). Each anonymous contribution has an IP address (33.875.047 contributions). The software convert them into integers and look for the nearest location in the IP2LOCATION database.  
+The goal is to get the association of edits with the location (coordinates) once and for all. The "Parsed Wikipedia edit history" consists in 116.590.856 contributions (8GB text file). Each anonymous contribution has an IP address (33.875.047 contributions).  Spark, we normally try to read our data in from multiple different machines. To make this possible, each worker needs to be able to find the start of a new record. I use bzip2 compression format that allow that.
+
+The software convert them into integers and look for the nearest location in the IP2LOCATION database.  
 
 To boost the IP resolution the SW exploits the database structure.
 
@@ -169,8 +198,9 @@ From [the official documentation about Broadcast Variables](http://spark.apache.
  ```scala
 /* val locationsRDD: RDD[(Long, String)] */
 
+// send read-only array to all the nodes
 val longIps: Broadcast[Array[Long]] =
-	sc.broadcast(locationsRDD.keys.collect.sorted) // broadcast array through clusters
+	sc.broadcast(locationsRDD.keys.collect.sorted)
 ...
 
 val editsWithIpRDD = editsRDD
@@ -198,7 +228,7 @@ The phase 1 ends with something like this (categoty#list of Long IPs):
 
 
 
-#### Phase 2 - filtering categories and clustering coordinates [parallelism with local reduce]
+#### Phase 2 - define regions [parallelism with shuffling]
 
 To filter categories we can list the words that have to be in the string category and the words to exclude.
 
@@ -285,7 +315,7 @@ class My_KMeans(masterURL: String, points: RDD[Point],
 
 
 
-#### Phase 3 - date analysis [parallelism with local reduce]
+#### Phase 3 - date analysis [parallelism with shuffling]
 
 The objectives of this phase are:
 
@@ -304,7 +334,7 @@ val groupsCategories = groups
     .mapValues(pts => pts distinct) // remove the duplicates
     .mapValues(pts => {
             pts.flatMap(pt => {
-                pts2Cats(pt)
+                pts2Cats(pt) // a large, read-only lookup table all over the nodes
             })
         })
     // RDD[(Int, List[(String, Int)])]
@@ -363,6 +393,10 @@ The objectives of this phase are:
 As I expected in the phase it's easy to appreciate the performance improvement. Including the transfer time of broadcast variables, the run of the IPs resolution using 5 slaves took 20min with respect to 5h of master-only use.
 
 To effectively appreciate the performance improvement on the KMeans execution it is necessary to select categories with a particularly high edit number (films, war, ...), or do not select categories at all otherwise each iteration takes about 10s to run and, thanks to the memorized points on nodes, only the new centroids needs to be propagated.
+
+By selecting no categories we get ~33.000.000 points, the execution goes from ~3min per iteration to 50sec.
+
+
 
 ![KMeans iterations](./imgs/executionP2.png)
 

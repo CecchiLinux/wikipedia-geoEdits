@@ -24,7 +24,7 @@ class My_KMeans(masterURL: String, points: RDD[Point], epsilon: Double, iteratio
     .config(mySparkConf)
     .getOrCreate().sparkContext
 
-
+  // singleton object
   object KMeansHelper extends Serializable {
     /**
      * Finds the closest centroid to the given point.

@@ -37,7 +37,7 @@ object WorldMap {
 
     for ((group, coordinates) <- ips) {
       val color = groupColors(group).brighter()
-      graphics.setColor(new Color(color.getRed, color.getGreen, color.getBlue, 50))
+      graphics.setColor(new Color(color.getRed, color.getGreen, color.getBlue))
       for (coordinate <- coordinates) {
         val (x, y) = toImageCoordinates(coordinate.x, coordinate.y, imageWidth, imageHeight)
         graphics.fillOval(x - 1, y - 1, 4, 4)
@@ -87,7 +87,7 @@ object WorldMap {
     for ((group, cat) <- topCats) {
       val color = groupColors(group)
       val string = "(" + group.toString + ") " + cat._1.replace("_", " ") + " " + cat._2.toString
-      val currentHeight = if (topCats.length <= 15) imageHeight / 2 + offset * i else imageHeight / 3 + offset * i
+      val currentHeight = if (topCats.length <= 15) imageHeight / 2 + offset * i else imageHeight / 4 + offset * i
       graphics.setColor(color)
       graphics.fillRect(10, currentHeight, 20, 20)
       graphics.setColor(Color.WHITE)
@@ -101,23 +101,23 @@ object WorldMap {
   }
 
   def writeSuperCategories(topCats: Seq[(String, List[Int])], graphics: Graphics2D, imageWidth: Int, imageHeight: Int, colors: IndexedSeq[Color]) {
-    val offset = 30
+    val offset = 20
     var i = 0
-    graphics.setFont(new Font("Arial Black", Font.BOLD, 20))
+    graphics.setFont(new Font("Arial Black", Font.BOLD, 12))
 
     for ((cat, _) <- topCats) {
       val color = colors(i)
       //val string = "(" + group.toString + ") " + cat._1.replace("_", " ") + " " + cat._2.toString
       val string = cat.replace("_", " ")
-      val currentHeight = if (topCats.length <= 15) imageHeight / 2 + offset*i else imageHeight / 3 + offset*i
+      val currentHeight = if (topCats.length <= 15) imageHeight / 2 + offset*i else imageHeight / 4 + offset*i
       graphics.setColor(color)
-      graphics.fillRect(10, currentHeight, 20, 20)
+      graphics.fillRect(10, currentHeight, 15, 15)
       graphics.setColor(Color.WHITE)
-      graphics.drawRect(10, currentHeight, 20, 20)
+      graphics.drawRect(10, currentHeight, 15, 15)
       graphics.setColor(Color.BLACK)
-      graphics.drawString(string, 38 + 1, currentHeight + 18 + 1)
+      graphics.drawString(string, 30 + 1, currentHeight + 18 + 1)
       graphics.setColor(Color.WHITE)
-      graphics.drawString(string, 38, currentHeight + 18)
+      graphics.drawString(string, 30, currentHeight + 18)
       i = i + 1
     }
 

@@ -11,8 +11,7 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   )
 
   val filter_categories = opt[Boolean](
-    descr = "Perform the filter",
-    required = true
+    descr = "Perform the filter"
   )
 
   val dataset_folder = opt[File](
