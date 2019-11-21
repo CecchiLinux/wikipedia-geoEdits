@@ -123,49 +123,50 @@ WikiGeoEdits is realized for the course of Scalable And Cloud Programming. The a
 
 
 
-### Interesting elements in the code
+### Code overview
 
 The software consists of several parts:
 
-- **Phase 1**: IP addresses resolution [complete parallelism]
+- **Phase 1**: IP addresses resolution [complete parallelism with final reduceByKey()]
 
   - create the main input RDD from external data
   - transform it to define new RDD with geographic coordinates
   - flatMap() and reduceByKey() to focus the study on categories
   - persist() the intermediate RDD that will need to be reused.
 
-- **Phase 2**: define regions [parallelism with shuffling]
+- **Phase 2**: define regions [parallelism with reduceByKey() iterations]
 
-  - define new RDD using filter() for the selected categories.
-  - apply the KMeans algorithm on the whole set of coordinates to define regions
+  - define new RDD using filter() for the selected categories
+  - apply the K-means algorithm on the whole set of coordinates to define regions
 
-- **Phase 3**: data distribution analysis [parallelism with shuffling]
+- **Phase 3**: data distribution analysis [parallelism with final reduceByKey()]
 
-  - define new RDD count occurrences of categories on each region
-  - 
+  - define new RDD using transformations like groupBy() and count categories on regions
+  - define new RDD grouping regions by popular categories
+  - launch actions to write results to the disk
 
 - **Phase 4**: map print [no parallelism]
+
+  - use previous region data to plot the map
 
   
 
 #### Phase 1 - IP addresses resolution [complete parallelism]
 
-The goal is to get the association of edits with the location (coordinates) once and for all. The "Parsed Wikipedia edit history" consists in 116.590.856 contributions (8GB text file). Each anonymous contribution has an IP address (33.875.047 contributions).  Spark, we normally try to read our data in from multiple different machines. To make this possible, each worker needs to be able to find the start of a new record. I use bzip2 compression format that allow that.
+The goal is to associate the edits with the location (coordinates). The "Parsed Wikipedia edit history" consists in 116.590.856 contributions (8GB text file). Each anonymous contribution has an IP address (33.875.047 contributions).  The bzip2 compression format for the datasets allow Spark to read our data from multiple different machines.
 
-The software convert them into integers and look for the nearest location in the IP2LOCATION database.  
-
-To boost the IP resolution the SW exploits the database structure.
+The software convert IP addresses into integers and look for the nearest location in the IP2LOCATION database.  To boost the IP resolution the SW exploits the database structure.
 
 <img src="./imgs/resLoc.png" />
 
 
 
-Converting an IP into *Long* we get a value between one of the *ip_form* and *ip_to* pairs. The pairs are ordered and consecutive than we can consider only the ip_from values placing them into an array and use a custom version of the dichotomic search that return the lower bound of the target IP's class instead of a boolean value (the target IP may not be present but still has a class).
+Converting an IP into *Long* you get a value between one of the *ip_form* and *ip_to* pairs. The pairs are ordered and consecutive than we can consider only the ip_from values placing them into an array and use a custom version of the dichotomic search that return the lower bound of the target IP's class instead of a boolean value (the target IP may not be present but still has a class).
 
 ```scala
-  def checker[T](target: T, ips: Array[T])(implicit ev: T => Ordered[T]): T = {
-    // contentx bound specify that the method applies to all types for which an 
-    // ordering exists (permits the "greater than")
+import Ordering.Implicits._ // tell compiler to use scala.math.Ordering.Ops
+
+def checker[T: Numeric](target: T, ips: Array[T]): T = { // Numeric <: Ordering (Ordering is an upper bound)
     /**
      * Dichotomic search: search for the target element through the array.
      * Return the target element if present or the nearest smaller element on the left.
@@ -180,7 +181,6 @@ Converting an IP into *Long* we get a value between one of the *ip_form* and *ip
       else if (ips(mid) > target) search(start, mid - 1)
       else search(mid + 1, end)
     }
-      
     search()
   }
 ```
@@ -200,7 +200,7 @@ From [the official documentation about Broadcast Variables](http://spark.apache.
 
 // send read-only array to all the nodes
 val longIps: Broadcast[Array[Long]] =
-	sc.broadcast(locationsRDD.keys.collect.sorted)
+	sc.broadcast(locationsRDD.keys.collect.sorted) // 2.920.499 values
 ...
 
 val editsWithIpRDD = editsRDD
@@ -228,7 +228,7 @@ The phase 1 ends with something like this (categoty#list of Long IPs):
 
 
 
-#### Phase 2 - define regions [parallelism with shuffling]
+#### Phase 2 - define regions [parallelism]
 
 To filter categories we can list the words that have to be in the string category and the words to exclude.
 
@@ -239,7 +239,7 @@ usage: ./run.sh [--dataset_folder <folder path>] [--words <required words>...]
 
 
 
-To group the filtered categories coordinates I use the K-Means algorithm. The geographic coordinates do not need to be modified to be used as points in the algorithm.
+To group the filtered categories coordinates I use the K-means algorithm. The geographic coordinates can be represented simply as Cartesian points.
 
 ```scala
 class Point(val x: Double, val y: Double) extends Serializable {
@@ -260,13 +260,13 @@ class Point(val x: Double, val y: Double) extends Serializable {
 
 
 
-My implementation of the K-Means algorithm:
+My implementation of the K-means algorithm:
 
 ```scala
 class My_KMeans(masterURL: String, points: RDD[Point], 
                 epsilon: Double, iterations: Int) extends Serializable {
 	
-    points.persist(StorageLevel.MEMORY_AND_DISK)// persiste points on nodes (whole exec)
+    points.persist(StorageLevel.MEMORY_AND_DISK)// persiste points on nodes
     
     /** Finds the closest centroid to the given point. */
     def closestCentroid(centroids: Array[Point], point: Point) = {
@@ -275,13 +275,13 @@ class My_KMeans(masterURL: String, points: RDD[Point],
 
 
     def kmeans(centroids: Array[Point], it: Int, 
-               stopF: (Array[Point], Array[Point], Int) => Boolean): Array[Point] = {
+               stopCond: (Array[Point], Array[Point], Int) => Boolean): Array[Point] = {
 
         // associate each point with his closest centroids, than for each cluster 				// calculate the average
         val clusters = (
             this.points
             // RDD[Point]
-              .map(point => KMeansHelper.closestCentroid(centroids, point) -> (point, 1))
+              .map(point => closestCentroid(centroids, point) -> (point, 1))
               // RDD[Point, (Point, Int)] // RDD[ClosestCentroid, (Point, 1)]
               .reduceByKeyLocally({
                 case ((ptA, numA), (ptB, numB)) => (ptA + ptB, numA + numB)
@@ -304,10 +304,27 @@ class My_KMeans(masterURL: String, points: RDD[Point],
         	})
         // Array[Point]
 
-        if (stopF(centroids, newCentroids, it)) kmeans(newCentroids, it+1, stopF)
+        if (stopCond(centroids, newCentroids, it)) kmeans(newCentroids, it+1, stopCond)
         else newCentroids
 	}
     ...
+
+	// repeat until convergence
+    def stopCondVariance(centroids: Array[Point], 
+                         newCentroids: Array[Point], it: Int): Boolean = {
+      // Calculate the centroid movement for the stopping condition
+      val movement = (centroids zip newCentroids).map({ case (a, b) => a distance b })
+      // Iterate if movement exceeds threshold
+      if (movement.exists(_ > epsilon)) true
+      else false
+    }
+    
+    def stopCondIterations(centroids: Array[Point], 
+                           newCentroids: Array[Point], it: Int): Boolean = {
+      // Iterate if iterations is lower than the threshold
+      if (it < iterations-1) true
+      else false
+    }
 }
 ```
 
@@ -315,7 +332,7 @@ class My_KMeans(masterURL: String, points: RDD[Point],
 
 
 
-#### Phase 3 - date analysis [parallelism with shuffling]
+#### Phase 3 - date analysis [parallelism]
 
 The objectives of this phase are:
 
@@ -362,9 +379,7 @@ val superCluster = mainCategories
     // RDD[String, List[Int]]
     .collect()
 ...
-```
 
-```scala
 def distinct[A](list: Iterable[A]): List[A] = {
     list.foldLeft(List[A]()) {
       case (acc, item) if acc.contains(item) => acc
@@ -410,3 +425,24 @@ Fig. Spark UI executors visualization
 
 
 
+
+
+## Results
+
+The simple 2D cluster centers obtained as a result of the K-Means clustering are nothing but longitudes and latitudes. They represent center points of all the locations present in the data set.
+
+The most interesting results obtained as the parameters change are:
+
+- centroids tend to move over the most important cities in the world
+
+- even if the K-means algorithm is non-deterministic, by filtering by categories that have different sub-categories for each state, it is possible to find a number of clusters that faithfully define the geographical boundaries
+
+  
+
+![politics200](imgs/politics200.gif)
+
+
+
+- the convergence of the K-means algorithm is fast even for most common categories (es. football 3M points)
+
+  
