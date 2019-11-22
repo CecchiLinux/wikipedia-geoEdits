@@ -2,7 +2,7 @@
 
 The main goal of the project is to study the distribution of interests in regions of the globe. This is tool analyzes the distribution of anonymous changes made to Wikipedia pages and uses the popularity of the categories as a measure of interest for a given subject.
 
-The software combines the [Wikipedia edit history](https://snap.stanford.edu/data/wiki-meta.html) (Wikipedia ENG: 116.590.856 contributions) with the [ip2Location LITE database](https://lite.ip2location.com/database/ip-country-region-city-latitude-longitude-zipcode) associating each anonymous contribution with the corresponding geographic coordinates. This is possible thanks to the anonymous editors identification that correspond to their ip address, e.g. ip:69.17.21.242.
+The software combines the [Wikipedia edit history](https://snap.stanford.edu/data/wiki-meta.html) (Wikipedia ENG: 116.590.856 contributions in pages of 364443 distinct categories) with the [ip2Location LITE database](https://lite.ip2location.com/database/ip-country-region-city-latitude-longitude-zipcode) associating each anonymous contribution with the corresponding geographic coordinates. This is possible thanks to the anonymous editors identification that correspond to their ip address, e.g. ip:69.17.21.242.
 The IP2Location LITE database provide 2.920.499 distinct location all over the world for the IP resolution.
 
 In this study I decided to consider only the geographic coordinates and then use a clustering algorithm to perform the grouping of areas based on the concentration of the points. The distribution of the categories of interest in the different areas of the world is thus studied.
@@ -446,3 +446,49 @@ The most interesting results obtained as the parameters change are:
 - the convergence of the K-means algorithm is fast even for most common categories (es. football 3M points)
 
   
+
+
+
+
+
+output example
+
+```text
+37,39.42985601968144,-90.51012338191201:
+	(laser_science,1)
+	(russian_art_collectors,5)
+	(national_science_foundation,1)
+	(art_nouveau_architects,6)
+	(art_nouveau,57)
+	(italian_art_collectors,1)
+	(italian_art,11)
+	(mathematics_books,7)
+	(american_science_writers,32)
+	(converts_to_christian_science,5)
+	(martial_arts_school_founders,44)
+	(korean_martial_art_organizations,7)
+	(_science_fiction_films,10)
+	(art_and_cultural_repatriation,5)
+	(art_deco_buildings,2)
+	(art_museums_and_galleries_in_italy,11)
+	(body_art,6)
+	(art,45)
+19,39.86435189838699,-107.28614939547467:
+	(social_science_journals,1)
+	(laser_science,4)
+	(arts_and_crafts_movement,9)
+	(russian_art_collectors,18)
+	(prehistoric_art,6)
+	(national_science_foundation,5)
+	(art_nouveau_architects,9)
+	(art_nouveau,30)
+	(italian_art,9)
+	(mathematics_books,7)
+	(arts_in_greece,16)
+	(american_science_writers,59)
+	(converts_to_christian_science,7)
+	(martial_arts_school_founders,88)
+	(korean_martial_art_organizations,3)
+	(_science_fiction_films,18)
+```
+

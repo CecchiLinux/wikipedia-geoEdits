@@ -133,7 +133,7 @@ object Main extends App {
       case 0 => catIpsRDD
       case _=> catIpsRDD
         .filter(x => filterWords.exists(f => x._1.replaceAll("[-+.^:,]","").split("_").contains(f))) // filter categories that contain all the words
-        .filter(x => excludedWords.forall(f => !(x._1.replaceAll("[-+.^:,]","").split("_").contains(f))))
+        .filter(x => excludedWords.exists(f => !(x._1.replaceAll("[-+.^:,]","").split("_").contains(f))))
     }
 
     // ========================================
